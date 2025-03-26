@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>提交项目进度更新</title>
+    <style>
+        body {
+            background-color: #F0F4F8; /* 莫兰迪浅灰蓝背景 */
+            margin: 2rem;
+            font-family: 'Segoe UI', system-ui;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h2 {
+            background: linear-gradient(135deg, #6C8EBF 0%, #D79B77 100%); /* 蓝橙渐变 */
+            color: white !important;
+            padding: 1.2rem 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(108, 142, 191, 0.2);
+            margin-bottom: 2rem;
+            transition: transform 0.3s ease; /* 添加悬停动画 */
+        }
+        h2:hover {
+            transform: translateY(-2px);
+        }
+        .section {
+            background: white;
+            border: 2px solid #B8C7D9; /* 莫兰迪蓝灰边框 */
+            border-radius: 12px;
+            box-shadow: 0 6px 15px rgba(215, 155, 119, 0.1); /* 橙色系阴影 */
+            padding: 2rem;
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        label {
+            color: #4A5568;
+            font-weight: 600;
+            margin-bottom: 0.8rem;
+            display: block;
+        }
+        textarea {
+            width: 100%;
+            border: 2px solid #CBD5E0;
+            border-radius: 6px;
+            padding: 0.75rem;
+            min-height: 120px;
+            transition: all 0.3s ease;
+            background: #F8FAFC; /* 浅色背景 */
+        }
+        textarea:focus {
+            border-color: #D79B77; /* 聚焦时橙色边框 */
+            box-shadow: 0 0 0 3px rgba(215, 155, 119, 0.2);
+            outline: none;
+        }
+        .btn {
+            background-color: #6C8EBF; /* 主按钮莫兰迪蓝 */
+            border: 2px solid #5B7CAD;
+            color: white;
+            padding: 0.75rem 2rem;
+            border-radius: 25px; /* 更圆润的按钮 */
+            font-weight: 600;
+            transition: all 0.2s;
+            display: inline-block;
+            margin-top: 1rem;
+        }
+        .btn:hover {
+            background-color: #D79B77; /* 悬停变为橙色 */
+            border-color: #C48965;
+            transform: translateY(-2px);
+            box-shadow: 0 3px 8px rgba(215, 155, 119, 0.3);
+        }
+        a.btn {
+            background-color: transparent;
+            border-color: #6C8EBF;
+            color: #6C8EBF;
+        }
+        a.btn:hover {
+            background-color: #F5E6DD; /* 橙色系浅背景 */
+            color: #B76E79;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="section">
+            <h2>提交项目进度更新 - {{ project[2] }}</h2>
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group">
+                    <label for="progress">进度更新信息:</label>
+                    <textarea id="progress" name="progress" required></textarea>
+                </div>
+                <button type="submit" class="btn">提交更新</button>
+            </form>
+            <a href="{{ url_for('unfinished_projects') }}" class="btn">返回未完成项目列表</a>
+        </div>
+    </div>
+</body>
+</html>

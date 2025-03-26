@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>新增已完成项目</title>
+    <style>
+        .form-container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 25px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #4A647B;
+            font-weight: 500;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #B8C7D9;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .btn {
+            background: #6C8EBF;
+            color: white;
+            padding: 8px 20px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+        }
+        .btn:hover {
+            background: #5B7CAD;
+        }
+        .error {
+            color: #dc3545;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="form-container">
+        <h2>新增已完成项目</h2>
+        {% if error %}
+            <div class="error" style="color:red;margin-bottom:15px">{{ error }}</div>
+        {% endif %}
+        
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <div class="form-group">
+                <label>项目类别 *</label>
+                <input type="text" name="category" required>
+            </div>
+
+            <div class="form-group">
+                <label>项目名称 *</label>
+                <input type="text" name="project_name" required>
+            </div>
+
+            <div class="form-group">
+                <label>主要工作 *</label>
+                <textarea name="main_work" rows="2" required></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>工作目标 *</label>
+                <textarea name="work_goal" rows="2" required></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>责任人</label>
+                <select name="responsible_person_id">
+                    <option value="">请选择</option>
+                    {% for user in users %}
+                        <option value="{{ user.id }}">{{ user.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>责任部门 *</label>
+                <input type="text" name="responsible_department" required>
+            </div>
+
+            <div class="form-group">
+                <label>配合人</label>
+                <input type="text" name="collaborator">
+            </div>
+
+            <div class="form-group">
+                <label>配合部门</label>
+                <input type="text" name="collaborating_department">
+            </div>
+
+            <div class="form-group">
+                <label>责任领导</label>
+                <select name="responsible_leader_id">
+                    <option value="">请选择</option>
+                    {% for user in users %}
+                        <option value="{{ user.id }}">{{ user.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>计划完成时间</label>
+                <input type="date" name="completion_time">
+            </div>
+
+            <div class="form-group">
+                <label>实际完成时间 *</label>
+                <input type="date" name="completion_time_finished" required 
+                       value="{{ current_datetime.strftime('%Y-%m-%d') }}">
+            </div>
+
+            <button type="submit" class="btn">提交项目</button>
+            <a href="{{ url_for('finished_projects') }}" class="btn" style="background:#6c757d;margin-left:10px">返回</a>
+        </form>
+    </div>
+</body>
+</html>

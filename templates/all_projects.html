@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全部项目总览</title>
+    <style>
+        /* 新增重复项目样式 */
+        .repeat-item {
+            color: #888 !important;
+        }
+        .repeat-overdue {
+            color: #F0C8A8 !important;
+        }
+
+        /* 保持原有CSS样式不变 */
+        body {
+            background: #F5F7FA;
+            margin: 0;
+            font-family: 'Segoe UI', sans-serif;
+            min-height: 100vh;
+        }
+
+        .main-container {
+            width: 100%;
+            padding: 0 20px;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            color: #4A647B;
+            border-bottom: 2px solid #D79B77;
+            padding-bottom: 8px;
+            margin: 20px 0;
+        }
+
+        .btn-main {
+            background: #6C8EBF;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 4px;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            margin: 2px;
+        }
+
+        .btn-main:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 3px 8px rgba(108, 142, 191, 0.3);
+        }
+
+        table {
+            width: 100%;
+            border: 2px solid #6C8EBF;
+            border-collapse: collapse;
+            margin-top: 20px;
+            box-shadow: 0 2px 12px rgba(108, 142, 191, 0.1);
+        }
+
+        th, td {
+            border: 1px solid #B8C7D9;
+            padding: 8px;
+            text-align: center;
+            vertical-align: middle;
+            word-wrap: break-word;
+        }
+
+        th {
+            background: #E1E8F0;
+            color: #4A647B;
+            font-weight: 600;
+            border-bottom: 3px solid #D79B77;
+        }
+
+        th:nth-child(1) { width: 4%; }
+        th:nth-child(2) { width: 6%; }
+        th:nth-child(3) { width: 10%; }
+        th:nth-child(6) { width: 7%; }
+        th:nth-child(7) { width: 7%; }
+        th:nth-child(13) { width: 6%; }
+        th:nth-child(14) { width: 6%; }
+        th:nth-child(4) { width: 11%; }
+        th:nth-child(5) { width: 7.6%; }
+        th:nth-child(6) { width: 7.6%; }
+        th:nth-child(7) { width: 7.6%; }
+        th:nth-child(8) { width: 7.6%; }
+        th:nth-child(9) { width: 7.6%; }
+        th:nth-child(10) { width: 7.6%; }
+        th:nth-child(11) { width: 7.6%; }
+        th:nth-child(12) { width: 6%; }
+        th:nth-child(13) { width: 6%; }
+
+        .status-overdue { color: #D79B77 !important; }
+        tr.overdue-unfinished td { 
+            background: #FFF4F0;
+            color: #D79B77 !important;
+            font-weight: 600;
+        }
+
+        #queryModal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            z-index: 1000;
+            width: 400px;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        .modal-close {
+            cursor: pointer;
+            font-size: 20px;
+        }
+        .query-type-group {
+            margin-bottom: 15px;
+        }
+        .query-type-group label {
+            display: block;
+            margin: 8px 0;
+        }
+        .date-input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .date-input-group input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .modal-actions {
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <h1>全部项目总览 - {{ current_date }}</h1>
+        
+        <div style="margin-bottom:15px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <a href="{{ url_for('index') }}" class="btn-main">返回主菜单</a>
+            <form method="post" action="{{ url_for('all_projects') }}" style="margin:0;" onsubmit="return handleExport(event)">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="export" value="true">
+                <button type="submit" class="btn-main">一键导出Excel</button>
+            </form>
+            <button class="btn-main" onclick="showQueryModal()">高级查询</button>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>序号</th>
+                    <th>类别</th>
+                    <th>项目名称</th>
+                    <th>主要工作</th>
+                    <th>工作目标</th>
+                    <th>完成时限</th>
+                    <th>实际完成时间</th>
+                    <th>责任人</th>
+                    <th>责任部门</th>
+                    <th>配合人</th>
+                    <th>配合部门</th>
+                    <th>责任领导</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% set seen = {} %}
+                {% if not all_projects %}
+                    <tr>
+                        <td colspan="14" style="text-align:center; padding:20px; color:#666;">
+                            暂无项目数据
+                        </td>
+                    </tr>
+                {% else %}
+                    {% for proj in all_projects %}
+                        {% set key = proj.main_work ~ proj.work_goal ~ proj.responsible_person %}
+                        {% if key in seen %}
+                            {% set _ = seen.update({key: seen[key] + 1}) %}
+                            {% set is_repeat = seen[key] > 1 %}
+                        {% else %}
+                            {% set _ = seen.update({key: 1}) %}
+                            {% set is_repeat = False %}
+                        {% endif %}
+                        
+                        <tr class="
+                            {% if proj.status == '逾期' and not proj.is_finished %}overdue-unfinished{% endif %}
+                            {% if is_repeat %}{% if proj.status == '逾期' %}repeat-overdue{% else %}repeat-item{% endif %}{% endif %}
+                        ">
+                            <td data-label="序号">{{ loop.index }}</td>
+                            <td data-label="类别">{{ proj.category }}</td>
+                            <td data-label="项目名称">{{ proj.project_name }}</td>
+                            <td data-label="主要工作">{{ proj.main_work }}</td>
+                            <td data-label="工作目标">{{ proj.work_goal }}</td>
+                            <td data-label="完成时限">{{ proj.plan_date|dateformat }}</td>
+                            <td data-label="实际完成时间">
+                                {{ proj.completion_time_finished|dateformat if proj.is_finished else '-' }}
+                            </td>
+                            <td data-label="责任人">{{ proj.responsible_person }}</td>
+                            <td data-label="责任部门">{{ proj.responsible_department }}</td>
+                            <td data-label="配合人">{{ proj.collaborator }}</td>
+                            <td data-label="配合部门">{{ proj.collaborating_department }}</td>
+                            <td data-label="责任领导">{{ proj.responsible_leader }}</td>
+                            <td data-label="状态">
+                                <span class="{% if proj.status == '逾期' %}status-overdue{% endif %}">
+                                    {{ proj.status }}
+                                </span>
+                            </td>
+                            <td data-label="操作">
+                                <a href="{{ url_for('finished_project_detail' if proj.is_finished else 'project_detail', project_id=proj.id) }}"
+                                   class="btn-main">详情</a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 查询模态框 -->
+    <div id="queryModal">
+        <div class="modal-header">
+            <h3>高级查询</h3>
+            <span class="modal-close" onclick="closeQueryModal()">×</span>
+        </div>
+        <form onsubmit="return handleQuerySubmit(event)">
+            <div class="query-type-group">
+                <label>
+                    <input type="radio" name="queryType" value="deadline" checked> 按计划时间查询
+                </label>
+                <label>
+                    <input type="radio" name="queryType" value="completion"> 按实际完成时间查询
+                </label>
+            </div>
+            <div class="date-input-group">
+                <input type="date" id="startDate" required>
+                <input type="date" id="endDate" required>
+            </div>
+            <div class="modal-actions">
+                <button type="submit" class="btn-main">查询</button>
+                <button type="button" class="btn-main" onclick="closeQueryModal()">取消</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        // 增强版导出功能（保持原样）
+        async function handleExport(event) {
+            event.preventDefault();
+            try {
+                const handle = await window.showSaveFilePicker({
+                    types: [{
+                        description: 'Excel Files',
+                        accept: {'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']}
+                    }]
+                });
+                
+                const formData = new FormData(event.target);
+                const response = await fetch(event.target.action, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) throw new Error(`导出失败: ${response.statusText}`);
+                
+                const fileStream = await response.blob();
+                const writable = await handle.createWritable();
+                await writable.write(fileStream);
+                await writable.close();
+                
+                alert('文件保存成功！');
+            } catch (error) {
+                if(error.name !== 'AbortError') {
+                    alert(`导出失败: ${error.message}`);
+                }
+            }
+        }
+
+        // 修正后的查询功能
+        function handleQuerySubmit(event) {
+            event.preventDefault();
+            
+            const queryType = document.querySelector('input[name="queryType"]:checked').value;
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            if (!startDate || !endDate) {
+                alert("请填写完整的日期范围");
+                return false;
+            }
+            
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            if (start > end) {
+                alert("结束日期不能早于开始日期");
+                return false;
+            }
+
+            const params = new URLSearchParams({
+                query_type: queryType,
+                start_date: startDate,
+                end_date: endDate,
+                _: Date.now()
+            });
+
+            fetch(`/all_projects?${params.toString()}`)
+                .then(response => {
+                    if (!response.ok) throw new Error(`请求失败: ${response.status}`);
+                    return response.text();
+                })
+                .then(html => {
+                    const parser = new DOMParser();
+                    const newDoc = parser.parseFromString(html, 'text/html');
+                    document.documentElement.innerHTML = newDoc.documentElement.innerHTML;
+                })
+                .catch(error => {
+                    console.error('查询错误:', error);
+                    alert(`查询失败: ${error.message}`);
+                })
+                .finally(() => {
+                    closeQueryModal();
+                });
+        }
+
+        // 模态框控制（保持原样）
+        function showQueryModal() {
+            document.getElementById('queryModal').style.display = 'block';
+        }
+
+        function closeQueryModal() {
+            document.getElementById('queryModal').style.display = 'none';
+        }
+
+        // 页面初始化（保持原样）
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('startDate').value = today;
+            document.getElementById('endDate').value = today;
+            
+            document.getElementById('queryModal').addEventListener('click', function(e) {
+                if (e.target === this) closeQueryModal();
+            });
+        });
+    </script>
+</body>
+</html>

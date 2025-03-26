@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目查询结果</title>
+    <style>
+        body { background: #F5F7FA; margin: 40px auto; font-family: 'Segoe UI', sans-serif; }
+        h1 { color: #4A647B; border-bottom: 2px solid #D79B77; padding-bottom: 8px; }
+        table { border: 2px solid #6C8EBF; background: white; box-shadow: 0 2px 8px rgba(108, 142, 191, 0.1); }
+        th, td { border: 1px solid #B8C7D9; padding: 8px; text-align: center; }
+        th { background: #E1E8F0; }
+        .btn-main { background: #6C8EBF; color: white; padding: 6px 12px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div style="max-width: 1200px; margin: 0 auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h1>项目查询结果 - {{ current_date }}</h1>
+            <a href="{{ url_for('all_projects') }}" class="btn-main">返回总览</a>
+        </div>
+        
+        <div style="margin-bottom: 20px; color: #6C8EBF;">
+            查询条件：{{ "计划完成时间" if query_type == 'deadline' else "实际完成时间" }}
+            {{ start_date }} 至 {{ end_date }}
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>项目类别</th>
+                    <th>项目名称</th>
+                    <th>主要工作</th>
+                    <th>目标日期</th>
+                    <th>责任人</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for project in projects %}
+                <tr>
+                    <td>{{ project['category'] }}</td>
+                    <td>{{ project['project_name'] }}</td>
+                    <td>{{ project['main_work'] }}</td>
+                    <td>{{ project['target_date']|dateformat }}</td>
+                    <td>{{ project['responsible_person'] }}</td>
+                    <td>{{ project['status'] }}</td>
+                    <td>
+                        <a href="{{ url_for('project_detail' if project['status'] != '已完成' else 'finished_project_detail', project_id=project['id']) }}"
+                           class="btn-main">详情</a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" style="text-align:center; padding:20px; color:#666;">
+                        未找到符合条件的项目
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

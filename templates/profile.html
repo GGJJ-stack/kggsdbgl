@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>个人信息修改</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="profile-container">  <!-- 新增容器 -->
+        <h2 class="profile-title">个人信息修改</h2>
+        <form method="post" class="profile-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            
+            <div class="form-group">  <!-- 表单分组 -->
+                <label for="password">新密码:</label>
+                <input type="password" id="password" name="password" value="{{ user[2] }}" class="form-input">
+            </div>
+            <div class="form-group">
+                <label for="phone">新手机号:</label>
+                <input type="text" id="phone" name="phone" value="{{ user[3] }}" class="form-input">
+            </div>
+            <button type="submit" class="submit-btn">确认修改</button>
+        </form>
+    </div>
+</body>
+</html>

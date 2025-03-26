@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>已完成项目</title>
+    <style>
+        table {
+            width: 100%;
+            border: 2px solid #6C8EBF;
+            border-collapse: collapse;
+            margin-top: 20px;
+            box-shadow: 0 2px 12px rgba(108, 142, 191, 0.1);
+        }
+        th, td {
+            border: 1px solid #B8C7D9;
+            padding: 8px;
+            text-align: center;
+            vertical-align: middle;
+            word-wrap: break-word;
+        }
+        th {
+            background: #E1E8F0;
+            color: #4A647B;
+            font-weight: 600;
+        }
+        .btn {
+            background: #6C8EBF;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            margin: 2px;
+            font-size: 13px;
+        }
+        .btn:hover {
+            background: #5B7CAD;
+        }
+        h1 {
+            color: #4A647B;
+            border-bottom: 2px solid #D79B77;
+            padding-bottom: 8px;
+        }
+        /* 新增重复项目样式 */
+        .duplicate-row td:not([rowspan]) {
+            opacity: 0.6;
+        }
+        th:nth-child(1) { width: 5%; }
+        th:nth-child(2) { width: 6%; }
+        th:nth-child(3) { width: 10%; }
+        th:nth-child(4) { width: 12%; }
+        th:nth-child(5) { width: 12%; }
+        th:nth-child(6) { width: 8%; }
+        th:nth-child(7) { width: 8%; }
+        th:nth-child(8) { width: 8%; }
+        th:nth-child(9) { width: 8%; }
+        th:nth-child(10) { width: 8%; }
+        th:nth-child(11) { width: 8%; }
+        th:nth-child(12) { width: 10%; }
+        th:nth-child(13) { width: 4%; }
+
+        .status-overdue {
+            color: #D79B77 !important;
+        }
+        tr.overdue td {
+            color: #D79B77 !important;
+            font-weight: 600;
+        }
+        .no-data {
+            text-align: center;
+            padding: 20px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <h1>已完成项目列表</h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}" style="color:{% if category == 'error' %}red{% else %}green{% endif %};margin:10px 0">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div style="margin-bottom:15px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <a href="{{ url_for('index') }}" class="btn">返回主菜单</a>
+        {% if is_admin %}
+        <a href="{{ url_for('add_finished_project') }}" class="btn">增加项目</a>
+        <form action="{{ url_for('download_projects') }}" method="get" style="margin:0">
+            <button type="submit" class="btn">导出Excel</button>
+        </form>
+        <form action="{{ url_for('finished_projects') }}" method="post" enctype="multipart/form-data" style="margin:0">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="file" name="file" accept=".xlsx" style="display:none" id="fileInput">
+            <label for="fileInput" class="btn" style="margin:0; cursor:pointer">导入Excel</label>
+            <button type="submit" name="upload_projects" class="btn">上传</button>
+        </form>
+        {% endif %}
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>序号</th>
+                <th>类别</th>
+                <th>项目名称</th>
+                <th>主要工作</th>
+                <th>工作目标</th>
+                <th>计划时间</th>
+                <th>责任人</th>
+                <th>责任部门</th>
+                <th>配合人</th>
+                <th>配合部门</th>
+                <th>责任领导</th>
+                <th>完成时间</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if not all_entries_sorted %}
+                <tr>
+                    <td colspan="13" class="no-data">暂无已完成项目数据</td>
+                </tr>
+            {% else %}
+                {% set prev_group = [] %}
+                {% for entry in all_entries_sorted %}
+                    {% set current_group = [
+                        entry.main_work,
+                        entry.entry_data.work_goal,
+                        entry.entry_data.responsible_person
+                    ] %}
+                    <tr class="
+                        {% if entry.entry_data.status == '逾期' %}overdue{% endif %}
+                        {% if current_group == prev_group %}duplicate-row{% endif %}
+                    ">
+                        <td>{{ loop.index }}</td>
+                        {% if entry.category_rowspan > 0 %}
+                        <td rowspan="{{ entry.category_rowspan }}" 
+                            style="background: #f8f9fa;font-weight:600">
+                            {{ entry.category }}
+                        </td>
+                        {% endif %}
+
+                        {% if entry.project_rowspan > 0 %}
+                        <td rowspan="{{ entry.project_rowspan }}">
+                            {{ entry.project_name }}
+                        </td>
+                        {% endif %}
+
+                        {% if entry.main_work_rowspan > 0 %}
+                        <td rowspan="{{ entry.main_work_rowspan }}">
+                            {{ entry.main_work }}
+                        </td>
+                        {% endif %}
+
+                        <td>{{ entry.entry_data.work_goal|default('', true)|truncate(15) }}</td>
+                        <td>{{ entry.entry_data.completion_time|dateformat('%Y-%m-%d') }}</td>
+                        <td>{{ entry.entry_data.responsible_person|default('-', true) }}</td>
+                        <td>{{ entry.entry_data.responsible_department }}</td>
+                        <td>{{ entry.entry_data.collaborator|default('-', true) }}</td>
+                        <td>{{ entry.entry_data.collaborating_department|default('-', true) }}</td>
+                        <td>{{ entry.entry_data.responsible_leader|default('-', true) }}</td>
+                        <td>
+                            <span class="{% if entry.entry_data.status == '逾期' %}status-overdue{% endif %}">
+                                {{ entry.entry_data.completion_time_finished|dateformat('%Y-%m-%d') }}
+                            </span>
+                        </td>
+                        <td>
+                            <div style="display:flex;flex-direction:column;gap:2px">
+                                <a href="{{ url_for('finished_project_detail', project_id=entry.entry_data.id) }}"
+                                   class="btn">详情</a>
+                                {% if is_admin %}
+                                <form method="POST" action="{{ url_for('finished_projects') }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="project_id" value="{{ entry.entry_data.id }}">
+                                    <button type="submit" name="delete_project" class="btn btn-delete" 
+                                            onclick="return confirm('确认删除该已完成项目？')">
+                                        删除
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% set _ = prev_group.clear() %}
+                    {% set _ = prev_group.extend(current_group) %}
+                {% endfor %}
+            {% endif %}
+        </tbody>
+    </table>
+
+    <script>
+        setTimeout(() => {
+            const alerts = document.querySelectorAll('.alert');
+            alerts.forEach(alert => {
+                alert.style.display = 'none';
+            });
+        }, 5000);
+
+        document.querySelectorAll('button[name="delete_project"]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                if (!confirm('确定要永久删除这个项目吗？此操作不可恢复！')) {
+                    e.preventDefault();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

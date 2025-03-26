@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>已完成项目详情 - {{ project.project_name }}</title>
+    <style>
+        /* 完全保持原有样式不变 */
+        body { background-color: #F5F7FA; margin: 2rem; font-family: 'Segoe UI', system-ui; }
+        .container { max-width: 800px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 6px 15px rgba(108, 142, 191, 0.1); padding: 2rem; }
+        h2 { background: linear-gradient(135deg, #6C8EBF 0%, #5B7CAD 100%); color: white; padding: 1.2rem 2rem; border-radius: 8px; box-shadow: 0 4px 15px rgba(108, 142, 191, 0.2); margin-bottom: 2rem; }
+        .info-section { margin-bottom: 2rem; padding: 1rem; border: 1px solid #E1E8F0; border-radius: 6px; }
+        .info-item { margin-bottom: 1.5rem; padding: 0.8rem; background-color: #F8FAFD; border-radius: 4px; }
+        label { color: #4A5568; font-weight: 600; display: block; margin-bottom: 0.5rem; }
+        .progress-list { list-style-type: none; padding-left: 0; }
+        .progress-item { padding: 1rem; margin-bottom: 0.8rem; background: #F0F4F9; border-left: 4px solid #6C8EBF; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
+        .status-tag { padding: 4px 12px; border-radius: 15px; font-size: 0.9em; font-weight: 500; }
+        .status-pending { background: #FFF3CD; color: #856404; }
+        .status-approved { background: #D4EDDA; color: #155724; }
+        .status-rejected { background: #F8D7DA; color: #721C24; }
+        .btn { background-color: #6C8EBF; color: white; padding: 0.75rem 1.5rem; border-radius: 6px; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; transition: all 0.3s ease; }
+        .btn:hover { background-color: #5B7CAD; transform: translateY(-2px); }
+        .alert { padding: 1rem; margin-bottom: 1.5rem; border-radius: 4px; }
+        .alert-success { background: #D4EDDA; color: #155724; }
+        .alert-danger { background: #F8D7DA; color: #721C24; }
+        .alert-info { background: #D1ECF1; color: #0C5460; }
+        .alert-warning { background: #FFF3CD; color: #856404; }
+        .text-muted { color: #6c757d; }
+        .form-control { width: 100%; padding: 0.75rem; border: 1px solid #ced4da; border-radius: 4px; margin-bottom: 1rem; }
+        .form-select { width: 100%; padding: 0.75rem; border: 1px solid #ced4da; border-radius: 4px; margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>{{ project.project_name }} - 项目详情</h2>
+
+        <!-- 基础信息区块 -->
+        <div class="info-section">
+            <div class="info-item">
+                <label>项目类别：</label>
+                <span>{{ project.category }}</span>
+            </div>
+            
+            <div class="info-item">
+                <label>责任部门：</label>
+                <span>{{ project.responsible_department }}</span>
+            </div>
+
+            <div class="info-item">
+                <label>责任人：</label>
+                <span>{{ project.responsible_person }}</span>
+            </div>
+
+            <div class="info-item">
+                <label>完成时间：</label>
+                <span>{{ project.completion_time_finished | dateformat }}</span>
+                {% if project.days_since_completion %}
+                <span class="text-muted">(已完成 {{ project.days_since_completion }} 天)</span>
+                {% endif %}
+            </div>
+
+            {% if project.is_overdue %}
+            <div class="alert alert-warning">
+                ⚠️ 该项目已完成超过30天未处理
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- 历史进度区块 -->
+        <div class="info-section">
+            <h3>📜 历史进度记录</h3>
+            {% if project.completion_statuses %}
+                <ul class="progress-list">
+                    {% for status in project.completion_statuses %}
+                    <li class="progress-item">
+                        <div class="progress-index">#{{ loop.index }}</div>
+                        <div style="flex-grow: 1; margin: 0 1rem;">{{ status }}</div>
+                        <small class="text-muted">
+                            {% if status.split('(') | length > 1 %}
+                                {{ status.split('(')[1].strip(')') }}
+                            {% endif %}
+                        </small>
+                    </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <div class="alert alert-info">暂无历史进度记录</div>
+            {% endif %}
+        </div>
+
+        <!-- 项目总结区块 -->
+        <div class="info-section">
+            <h3>📝 项目总结</h3>
+            
+            <!-- 状态提示 -->
+            <div class="alert alert-{{ status_labels[project.summary_status][1] if project.summary_status else 'info' }}">
+                {% if project.summary_status %}
+                    {{ status_labels[project.summary_status][0] }}
+                    {% if project.summary_status == 'approved' %}
+                        - {{ project.summary_reviewed_at | dateformat('%Y-%m-%d %H:%M') }}
+                    {% elif project.summary_status == 'rejected' %}
+                        - {{ project.summary_reviewed_at | dateformat('%Y-%m-%d %H:%M') }}
+                    {% endif %}
+                {% else %}
+                    等待提交总结
+                {% endif %}
+            </div>
+
+            <!-- 已提交总结内容 -->
+            {% if project.final_summary %}
+            <div class="info-item">
+                <label>总结内容：</label>
+                <div class="summary-content" style="white-space: pre-wrap;">{{ project.final_summary }}</div>
+                <small class="text-muted">
+                    提交时间：{{ project.summary_submitted_at | dateformat('%Y-%m-%d %H:%M') }}
+                </small>
+            </div>
+            {% endif %}
+
+            <!-- 审核意见 -->
+            {% if project.review_comment %}
+            <div class="info-item">
+                <label>📌 审核意见：</label>
+                <div class="alert alert-warning" style="white-space: pre-wrap;">{{ project.review_comment }}</div>
+            </div>
+            {% endif %}
+
+            <!-- 总结提交表单 -->
+            {% if can_edit_summary %}
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="info-item">
+                    <label>{{ '重新提交项目总结' if project.summary_status == 'rejected' else '填写项目总结' }}</label>
+                    <textarea name="final_summary" 
+                              class="form-control" 
+                              rows="5" 
+                              placeholder="请详细说明项目完成情况、成果和经验教训..."
+                              required>{{ project.final_summary or '' }}</textarea>
+                    <button type="submit" 
+                            name="submit_summary" 
+                            class="btn">
+                        {{ '重新提交' if project.summary_status == 'rejected' else '提交总结' }}
+                    </button>
+                </div>
+            </form>
+            {% endif %}
+
+            <!-- 管理员审核区域 -->
+            {% if can_review %}
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="info-item">
+                    <label>🔍 总结审核</label>
+                    <select name="review_result" class="form-select" required>
+                        <option value="">请选择审核结果</option>
+                        <option value="approved">通过审核</option>
+                        <option value="rejected">驳回修改</option>
+                    </select>
+                    
+                    <textarea name="review_comment" 
+                              class="form-control" 
+                              rows="3" 
+                              placeholder="请输入审核意见（驳回时必填）">{{ project.review_comment or '' }}</textarea>
+                    
+                    <button type="submit" 
+                            name="review_summary" 
+                            class="btn btn-warning">
+                        提交审核结果
+                    </button>
+                </div>
+            </form>
+            {% endif %}
+        </div>
+
+        <!-- 操作按钮 -->
+        <div style="margin-top: 2rem;">
+            <a href="{{ url_for('finished_projects') }}" class="btn">
+                ← 返回项目列表
+            </a>
+        </div>
+    </div>
+
+    <!-- 日期格式化处理 -->
+    <script>
+        document.querySelectorAll('.date-format').forEach(element => {
+            const rawDate = element.textContent.trim();
+            if (rawDate) {
+                const date = new Date(rawDate);
+                element.textContent = date.toLocaleDateString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>未完成项目</title>
+    <style>
+        body {
+            max-width: 100%;
+            margin: 40px auto;
+            padding: 0;
+            font-family: 'Segoe UI', sans-serif;
+            background: #F5F7FA;
+        }
+        table {
+            width: 100%;
+            border: 2px solid #6C8EBF;
+            border-collapse: collapse;
+        }
+        h1 {
+            color: #6C8EBF;
+            font-size: 28px;
+            border-bottom: 3px solid #D79B77;
+            padding-bottom: 10px;
+            margin-bottom: 25px;
+            background: linear-gradient(45deg, #6C8EBF 10%, #D79B77 90%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 2px 2px 4px rgba(108, 142, 191, 0.1);
+        }
+        th, td {
+            padding: 12px;
+            border: 1px solid #B8C7D9;
+            text-align: center !important;
+            vertical-align: middle;
+        }
+        th {
+            background: linear-gradient(to bottom, #E1E8F0, #D3DDE9) !important;
+            font-weight: 600;
+            border-bottom: 3px solid #D79B77;
+        }
+        .overdue {
+            color: #B76E79 !important;
+            font-weight: bold;
+        }
+
+        /* 列宽调整 */
+        th:nth-child(1) { width: 5%; }
+        th:nth-child(2) { width: 7.6%; }
+        th:nth-child(3) { width: 11%; }
+        th:nth-child(4) { width: 11%; }
+        th:nth-child(5),
+        th:nth-child(6),
+        th:nth-child(7),
+        th:nth-child(8),
+        th:nth-child(9),
+        th:nth-child(10),
+        th:nth-child(11) { width: 7.6%; }
+        th:nth-child(12) { width: 6%; }
+        th:nth-child(13) { width: 6%; }
+
+        /* 按钮样式 */
+        .btn-excel, .btn-action {
+            background-color: #6C8EBF;
+            border-color: #5B7CAD;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-excel:hover, 
+        .btn-action:hover {
+            background-color: #D79B77;
+            border-color: #C48965;
+            box-shadow: 0 3px 8px rgba(108, 142, 191, 0.3);
+        }
+
+        .btn-action {
+            width: 100px;
+            margin: 4px 0;
+            display: inline-block;
+        }
+
+        .admin-tools {
+            margin-bottom: 20px;
+        }
+        .admin-tools form {
+            display: inline-block;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<style>
+    /* 在现有按钮样式后添加新样式 */
+    .btn-main {
+        background-color: #6C8EBF !important;
+        border-color: #5B7CAD !important;
+        color: white !important;
+        padding: 8px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.3s;
+        text-decoration: none;
+        display: inline-block;
+        margin: 15px 0;
+    }
+    .btn-main:hover {
+        background-color: #5B7CAD !important;
+        box-shadow: 0 3px 8px rgba(108, 142, 191, 0.3);
+    }
+    .duplicate {
+        color: #888 !important; /* 浅灰色 */
+    }
+    .duplicate.overdue {
+        color: #ffb3b3 !important; /* 浅红色 */
+    }
+</style>
+
+<body>
+    <h1>未完成项目列表 - {{ current_date }}</h1>
+    
+    {% if not is_admin %}  {# 新增普通用户按钮区域 #}
+    <div class="user-tools" style="text-align: right; margin-bottom: 20px;">
+        <a href="{{ url_for('index') }}" class="btn-main">
+            返回主菜单
+        </a>
+    </div>
+    {% endif %}
+
+    {% if is_admin %}  {# 原有管理员工具区保持不变 #}
+    <div class="admin-tools">
+        <div style="margin: 10px 0; display: flex; gap: 10px; align-items: center;">
+            <form method="post" enctype="multipart/form-data">
+                <input type="file" name="file" accept=".xlsx" required
+                       onchange="validateImportFile(this)">
+                <button type="submit" name="upload_projects" class="btn-excel" 
+                    title="导入要求：&#10;• 分类需与现有分类一致&#10;• 支持自动修正大小写和空格&#10;• 日期格式为YYYY-MM-DD">
+                    Excel批量导入
+                </button>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            </form>
+            
+            <!-- 修改导出表单 -->
+            <form method="post" id="exportForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="button" onclick="handleExport()" class="btn-excel">
+                    Excel导出当前
+                </button>
+            </form>
+            
+            <form action="{{ url_for('add_project') }}" method="get">
+                <button type="submit" class="btn-excel">
+                    添加项目
+                </button>
+            </form>
+            
+            <form action="{{ url_for('index') }}" method="get">
+                <button type="submit" class="btn-excel">
+                    返回主菜单
+                </button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+    {% if error %}
+        <p class="error">{{ error }}</p>
+    {% endif %}
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>类别</th>
+                <th>项目名称</th>
+                <th>主要工作</th>
+                <th>工作目标</th>
+                <th>完成时间</th>
+                <th>责任人</th>
+                <th>责任部门</th>
+                <th>配合人</th>
+                <th>配合部门</th>
+                <th>责任领导</th>
+                <th>状态</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {# 修复命名空间初始化和分组逻辑 #}
+            {% set ns = namespace(
+                entries={},
+                category_groups={},
+                project_groups={},
+                main_work_groups={}
+            ) %}
+            
+            {# 预处理分组信息 #}
+            {% for project in projects %}
+                {% set category = project[1] %}
+                {% if category not in ns.category_groups %}
+                    {% set _ = ns.category_groups.update({category: loop.index}) %}
+                {% endif %}
+                
+                {% set project_name = project[2] %}
+                {% if project_name not in ns.project_groups %}
+                    {% set _ = ns.project_groups.update({project_name: loop.index}) %}
+                {% endif %}
+                
+                {% set main_work = project[3]|trim|lower %}
+                {% if main_work not in ns.main_work_groups %}
+                    {% set _ = ns.main_work_groups.update({main_work: loop.index}) %}
+                {% endif %}
+            {% endfor %}
+
+            {% for project in projects %}
+                {# 标准化字段并生成entry_key #}
+                {% set main_work = project[3]|trim|lower %}
+                {% set work_target = project[4]|trim|lower %}
+                {% set responsible_person = project[6]|trim|lower %}
+                {% set entry_key = [main_work, work_target, responsible_person]|join('|') %}
+                
+                {# 修复重复判断逻辑 #}
+                {% set is_duplicate = entry_key in ns.entries %}
+                {% if not is_duplicate %}
+                    {% set _ = ns.entries.update({entry_key: true}) %}
+                {% endif %}
+                
+                <tr class="{% if project[11] == '逾期' %}overdue{% endif %} {% if is_duplicate %}duplicate{% endif %}">
+                    <td>{{ loop.index }}</td>
+                    {# 修正行合并逻辑 #}
+                    {% if loop.index0 == ns.category_groups[project[1]]-1 %}
+                        <td rowspan="{{ projects|selectattr('1', 'equalto', project[1])|list|count }}">{{ project[1] }}</td>
+                    {% endif %}
+                    {% if loop.index0 == ns.project_groups[project[2]]-1 %}
+                        <td rowspan="{{ projects|selectattr('2', 'equalto', project[2])|list|count }}">{{ project[2] }}</td>
+                    {% endif %}
+                    {% if loop.index0 == ns.main_work_groups[main_work]-1 %}
+                        <td rowspan="{{ projects|selectattr('3', 'equalto', project[3])|list|count }}">{{ project[3] }}</td>
+                    {% endif %}
+                    <td>{{ project[4] }}</td>
+                    <td>{{ project[5] }}</td>
+                    <td>{{ project[6] }}</td>
+                    <td>{{ project[7] }}</td>
+                    <td>{{ project[8] }}</td>
+                    <td>{{ project[9] }}</td>
+                    <td>{{ project[10] }}</td>
+                    <td>{{ project[11] }}</td>
+                    <td>
+                        {% if is_admin %}
+                            <form action="{{ url_for('edit_project', project_id=project[0]) }}" method="get">
+                                <button type="submit" class="btn-action">
+                                    编辑
+                                </button>
+                            </form>
+                            <form action="{{ url_for('delete_project', project_id=project[0]) }}" method="post" style="display: inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn-action" 
+                                        onclick="return confirm('确认要永久删除该项目吗？此操作不可恢复！')">
+                                    删除
+                                </button>
+                            </form>
+                            <form action="{{ url_for('mark_project_finished', project_id=project[0]) }}" method="post" style="display: inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn-action" 
+                                        onclick="return confirm('确认该项目已完成？')">
+                                    确定完成
+                                </button>
+                            </form>
+                        {% endif %}
+                        <form action="{{ url_for('project_detail', project_id=project[0]) }}" method="get">
+                            <button type="submit" class="btn-action">
+                                查看进度
+                            </button>
+                        </form>
+                        {% if is_admin and not project[11] %}
+                        <form action="{{ url_for('mark_project_finished', project_id=project[0]) }}" method="post">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn-action" 
+                                    onclick="return confirm('确认标记该项目为已完成？')">
+                                标记完成
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>
+
+<script>
+// 新增导出处理函数
+function handleExport() {
+    const formData = new FormData(document.getElementById('exportForm'));
+    
+    fetch(window.location.href, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.blob())
+    .then(blob => {
+        const filename = prompt('请输入保存文件名（无需扩展名）:', `未完成项目_${new Date().toLocaleDateString()}`);
+        if (!filename) return;
+
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${filename}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    })
+    .catch(error => {
+        console.error('导出失败:', error);
+        alert('导出失败，请检查控制台日志');
+    });
+}
+
+// 修改后的文件验证函数
+function validateImportFile(input) {
+    const allowedTypes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    
+    if (!allowedTypes.includes(input.files[0].type)) {
+        alert('错误：仅支持.xlsx格式文件');
+        input.value = '';
+        return false;
+    }
+    
+    if (input.files[0].size > maxSize) {
+        alert('错误：文件大小不能超过5MB');
+        input.value = '';
+        return false;
+    }
+    
+    // 新增分类格式提示
+    const confirmation = confirm('请确保文件中包含"category"列，且分类名称与系统现有分类一致（不区分大小写和空格）');
+    return confirmation;
+}
+
+// 增强错误处理
+function handleImportError(error) {
+    console.error('导入失败:', error);
+    if(error.includes('category')) {
+        alert('分类字段错误：请检查分类名称是否与系统现有分类一致');
+    } else {
+        alert('导入失败，错误信息：' + error);
+    }
+}
+</script>

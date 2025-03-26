@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>错误页面</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container error-container">
+        <h1>⚠️ 发生错误</h1>
+        <div class="error-message">{{ message }}</div>
+        <a href="{{ url_for('index') }}" class="btn">返回首页</a>
+    </div>
+</body>
+</html>

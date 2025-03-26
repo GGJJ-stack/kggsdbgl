@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户管理</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 30px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #2c3e50;
+            font-size: 28px;
+            margin-bottom: 25px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 25px 0;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: center;
+            vertical-align: middle;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            margin: 2px;
+        }
+        button:hover {
+            background-color: #2980b9;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        form[method="post"] button {
+            background-color: #e74c3c;
+        }
+        form[method="post"] button:hover {
+            background-color: #c0392b;
+        }
+        .error {
+            background: #ffeaea;
+            color: #e74c3c;
+            padding: 12px;
+            border-radius: 4px;
+            margin: 20px 0;
+            border: 1px solid #ffcccc;
+        }
+        input[type="file"], 
+        input[type="submit"] {
+            padding: 8px 15px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            margin: 5px 0;
+        }
+        input[type="submit"] {
+            background-color: #2ecc71;
+            color: white;
+            border-color: #27ae60;
+        }
+    </style>
+    <style>
+        body {
+            background-color: #F5F7FA !important; /* 统一背景色 */
+        }
+        
+        h1 {
+            background: linear-gradient(135deg, #6C8EBF 0%, #5B7CAD 100%) !important;
+            box-shadow: 0 4px 15px rgba(108, 142, 191, 0.2) !important;
+            color: white !important;
+            border-radius: 8px;
+            padding: 15px 30px;
+            border: none;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+    
+        table {
+            background: #E1E8F0 !important; /* 表格背景色 */
+            border: 2px solid #6C8EBF !important;
+            box-shadow: 0 6px 15px rgba(108, 142, 191, 0.1) !important;
+        }
+    
+        th {
+            background-color: #6C8EBF !important; /* 表头主色 */
+            border-color: #5B7CAD !important;
+        }
+    
+        tr:nth-child(even) {
+            background-color: #F0F4F9 !important; /* 更浅的交替色 */
+        }
+    
+        button {
+            background-color: #6C8EBF !important;
+            border: 1px solid #5B7CAD !important;
+            box-shadow: 0 2px 4px rgba(108, 142, 191, 0.15) !important;
+        }
+    
+        button:hover {
+            background-color: #5B7CAD !important;
+            box-shadow: 0 3px 8px rgba(92, 129, 175, 0.25) !important;
+        }
+    
+        form[method="post"] button {
+            background-color: #3A5A8B !important; /* 删除按钮深色 */
+            border-color: #2A4A7B !important;
+        }
+    
+        form[method="post"] button:hover {
+            background-color: #2A4A7B !important;
+        }
+    
+        .error {
+            background: #FFEDED;
+            border-color: #FFD6D6;
+            color: #B00020;
+        }
+    
+        input[type="submit"] {
+            background-color: #6C8EBF !important;
+            border-color: #5B7CAD !important;
+        }
+    </style>
+</head>
+<body>
+    <h1>用户管理</h1>
+
+    <!-- 修改按钮容器和样式 -->
+    <div class="admin-tools">
+        <div style="margin: 10px 0; display: flex; gap: 10px; align-items: center;">
+            <!-- 上传表单 -->
+            <form method="post" enctype="multipart/form-data" style="display: flex; gap: 10px;">
+                <input type="file" name="file" accept=".xlsx,.xls" required 
+                       style="flex:1; border:1px solid #5B7CAD; border-radius:4px; padding:6px;">
+                <button type="submit" name="upload_users" class="btn-excel">
+                    Excel批量导入
+                </button>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            </form>
+    
+            <!-- 下载按钮 -->
+            <form method="POST" action="{{ url_for('user_management') }}">
+                <button type="submit" name="download_users" class="btn-excel">
+                    Excel导出用户
+                </button>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            </form>
+    
+            <!-- 添加用户按钮 -->
+            <form action="{{ url_for('add_user') }}" method="get">
+                <button type="submit" class="btn-excel">
+                    添加用户
+                </button>
+            </form>
+    
+            <!-- 返回按钮 -->
+            <form action="{{ url_for('index') }}" method="get">
+                <button type="submit" class="btn-excel">
+                    返回主菜单
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- 删除原有.action-buttons相关样式，复用全局样式 -->
+    <style>
+        /* 复用未完成项目页面样式 */
+        .admin-tools {
+            margin-bottom: 20px;
+        }
+        .admin-tools form {
+            display: inline-block;
+            margin-right: 10px;
+        }
+    </style>
+    {% if error %}
+        <p class="error">{{ error }}</p>
+    {% endif %}
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>用户名</th>
+                <th>电话</th>
+                <th>是否为管理员</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+                <tr>
+                    <td>{{ user[0] }}</td>
+                    <td>{{ user[1] }}</td>
+                    <td>{{ user[2] }}</td>
+                    <td>{{ '是' if user[3] else '否' }}</td>
+                    <td>
+                        <!-- 将带有橙色边框的表单移动到循环内部 -->
+                        <form action="{{ url_for('edit_user', user_id=user[0]) }}" method="get" style="display: inline; border-left: 3px solid #D79B77;">
+                            <button type="submit" class="btn-action">编辑</button>
+                        </form>
+                        <form action="{{ url_for('user_management') }}" method="post" style="display: inline;">
+                            <input type="hidden" name="user_id" value="{{ user[0] }}">
+                            <input type="hidden" name="delete_user" value="1">
+                            <button type="submit" onclick="return confirm('确定要删除该用户吗？')" class="btn-action">删除</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+
+<style>
+
+    .action-buttons {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 30px;
+        flex-wrap: wrap;
+        padding: 12px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(108, 142, 191, 0.1);
+    }
+
+    /* 统一按钮容器 */
+    .action-buttons form,
+    .action-buttons button {
+        flex: 0 0 240px;
+        height: 40px;
+        margin: 0;
+        display: flex;
+        align-items: center;
+    }
+
+    .action-buttons form[enctype],
+    .action-buttons form:not([enctype]) {
+        flex: 1;
+        min-width: 200px;
+    }
+
+    /* 文件上传表单内部布局 */
+    .action-buttons form[enctype] {
+        flex: 1;
+        display: flex;
+        gap: 10px;
+    }
+
+    /* 文件输入框 */
+    input[type="file"] {
+        flex: 1;
+        width: auto;
+    }
+
+    /* 上传按钮 */
+    .action-buttons form[enctype] input[type="submit"] {
+        flex: 0 0 120px;  /* 固定按钮宽度 */
+        width: 120px;
+    }
+
+    /* 下载按钮 */
+    .action-buttons form:not([enctype]) input[type="submit"] {
+        flex: 0 0 120px;  /* 与上传按钮相同宽度 */
+        width: 120px;
+    }
+
+    /* 表单容器调整 */
+    .action-buttons form[enctype],
+    .action-buttons form:not([enctype]) {
+        flex: 0 0 auto;  /* 根据内容自动分配 */
+        min-width: 240px; /* 保持原始容器宽度 */
+    }
+    .action-buttons form[enctype] {
+        flex: 0 0 240px;
+        display: flex;
+        gap: 10px;
+        padding: 1px;         
+        align-items: center;  
+    }
+
+    input[type="file"] {
+        flex: 1;
+        height: 38px;         
+        margin: 0;
+        align-self: center;  
+    }
+
+    .action-buttons form[enctype] input[type="submit"] {
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        margin: 0;
+        flex-shrink: 0;
+        box-sizing: border-box;
+    }
+
+    input[type="file"] {
+        width: calc(100% - 10px); 
+        height: 100%;
+        margin: 0;
+        border: 1px solid #5B7CAD;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+
+    .action-buttons form:not([enctype]) input[type="submit"] {
+        width: 100%;
+        height: 100%;
+        box-sizing: border-box; 
+    }
+</style>
+
+<style>
+    /* 在原有样式基础上修改 */
+    h1 {
+        background: linear-gradient(135deg, #6C8EBF 0%, #D79B77 100%) !important;
+        border-bottom: 3px solid #D79B77 !important;
+    }
+
+    th {
+        border-bottom: 2px solid #D79B77 !important;
+    }
+
+    /* 新增橙色系按钮样式 */
+    .btn-excel:hover,
+    .btn-action:hover {
+        background-color: #D79B77 !important;
+        border-color: #C48965 !important;
+    }
+
+    /* 操作按钮配色调整 */
+    form[method="post"] button {
+        background-color: #D79B77 !important;
+        border-color: #C48965 !important;
+    }
+
+    form[method="post"] button:hover {
+        background-color: #B76E79 !important;
+    }
+
+    /* 表格行悬浮效果 */
+    tr:hover {
+        background-color: #FFF4EF !important;
+    }
+
+    /* 添加橙色装饰线 */
+    table {
+        border-top: 3px solid #D79B77 !important;
+    }
+</style>

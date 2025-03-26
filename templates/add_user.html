@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>添加用户</title>
+    <style>
+        body {
+            background-color: #F5F7FA;
+            margin: 2rem;
+            font-family: 'Segoe UI', system-ui;
+        }
+        h1 {
+            background: linear-gradient(135deg, #6C8EBF 0%, #5B7CAD 100%);
+            color: white !important;
+            padding: 1.2rem 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(108, 142, 191, 0.2);
+            margin-bottom: 2rem;
+        }
+        form {
+            background: #FFFFFF;
+            border: 2px solid #E1E8F0;
+            border-radius: 8px;
+            box-shadow: 0 6px 15px rgba(108, 142, 191, 0.1);
+            padding: 2rem;
+            margin: 0 auto 2rem;
+            max-width: 500px;
+        }
+        label {
+            color: #4A5568;
+            font-weight: 600;
+            margin-bottom: 0.8rem;
+            display: block;
+        }
+        input[type="text"],
+        input[type="password"] {
+            border: 2px solid #CBD5E0;
+            border-radius: 6px;
+            padding: 0.75rem;
+            margin-bottom: 1.5rem;
+            width: 100%;
+            box-sizing: border-box;
+            transition: border-color 0.3s ease;
+        }
+        input:focus {
+            border-color: #6C8EBF;
+            box-shadow: 0 0 0 3px rgba(108, 142, 191, 0.2);
+            outline: none;
+        }
+        input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            accent-color: #6C8EBF;
+            margin: 0 0 0 10px;
+            vertical-align: middle;
+        }
+        button {
+            background-color: #6C8EBF;
+            border: 2px solid #5B7CAD;
+            padding: 0.75rem 2rem;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: all 0.2s;
+            width: 100%;
+            margin-top: 1rem;
+            color: white;
+        }
+        button:hover {
+            background-color: #5B7CAD;
+            transform: translateY(-1px);
+        }
+        .error {
+            background: #FFEDED;
+            border: 2px solid #FFD6D6;
+            color: #B00020;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 2rem;
+        }
+        a[href*="user_management"] {
+            display: inline-block;
+            margin-top: 2rem;
+            color: #6C8EBF;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        a[href*="user_management"]:hover {
+            background: #E1E8F0;
+        }
+    </style>
+</head>
+<body>
+    <h1>添加用户</h1>
+    {% if error %}
+        <p class="error">{{ error }}</p>
+    {% endif %}
+    <form action="{{ url_for('add_user') }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="username">用户名:</label>
+        <input type="text" id="username" name="username" required>
+        <label for="password">密码:</label>
+        <input type="password" id="password" name="password">
+        <label for="phone">电话:</label>
+        <input type="text" id="phone" name="phone">
+        <label for="is_admin">是否为管理员:</label>
+        <input type="checkbox" id="is_admin" name="is_admin" value="1">
+        <button type="submit">添加</button>
+    </form>
+    <a href="{{ url_for('user_management') }}">返回用户管理</a>
+</body>
+</html>

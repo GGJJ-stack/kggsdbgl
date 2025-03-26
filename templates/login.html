@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>督办管理系统 - 登录</title>
+    <style>
+        :root {
+            --primary-color: #6C8EBF;
+            --secondary-color: #D79B77;
+            --error-color: #B76E79;
+            --text-color: #4A5568;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .login-card {
+            background: rgba(255, 255, 255, 0.98);
+            padding: 3rem 2.5rem;
+            border-radius: 1.5rem;
+            box-shadow: 
+                0 12px 24px rgba(0, 0, 0, 0.08),
+                0 4px 12px rgba(0, 0, 0, 0.03);
+            position: relative;
+            overflow: hidden;
+            margin: 0 auto;
+            width: 90%;
+            max-width: 420px;
+        }
+
+        .form-group {
+            margin: 0 auto 1.8rem;
+            max-width: 320px;
+            position: relative;
+        }
+
+        input {
+            width: 100%;
+            padding: 1rem 1.5rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 0.75rem;
+            font-size: 1rem;
+            caret-color: var(--primary-color);
+            background: #ffffff;
+            box-sizing: border-box;
+            transition: border-color 0.2s ease;
+        }
+
+        input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15);
+            outline: none;
+        }
+
+        button {
+            width: 100%;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            font-size: 1rem;
+            box-sizing: border-box;
+            max-width: 320px;
+            margin: 0 auto;
+            display: block;
+            background: linear-gradient(135deg, #5294ff, #7865f0);
+            color: white;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .logo h1 {
+            font-size: 1.8rem;
+            margin: 0 0 2rem 0;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .error-message {
+            background: var(--error-color);
+            color: white;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1.5rem;
+            text-align: center;
+            animation: slideIn 0.3s ease;
+        }
+
+        .time-display {
+            text-align: center;
+            color: #666;
+            margin-top: 1.5rem;
+            font-size: 0.9rem;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="logo">
+            <h1>控股公司督办管理系统</h1>
+        </div>
+
+        {% if error %}
+        <div class="error-message">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <!-- 新增next参数传递 -->
+            <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
+            
+            <div class="form-group">
+                <input type="text" name="username" 
+                       placeholder="用户名" required>
+            </div>
+            
+            <div class="form-group">
+                <input type="password" name="password"
+                       placeholder="密码" required>
+            </div>
+            
+            <button type="submit">登录</button>
+        </form>
+
+        <div class="time-display">
+            系统时间：{{ current_datetime.strftime('%Y-%m-%d %H:%M:%S') }}
+        </div>
+    </div>
+</body>
+</html>
+<link rel="stylesheet" href="/static/css/style.css?v=1.0.3">
+<!-- 通过修改?v=后的版本号强制更新 -->
