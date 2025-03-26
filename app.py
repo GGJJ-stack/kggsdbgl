@@ -1,44 +1,290 @@
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, abort, flash, send_file, g
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_wtf.csrf import CSRFProtect, validate_csrf, generate_csrf,CSRFError
+from flask_wtf.csrf import CSRFProtect, validate_csrf, generate_csrf, CSRFError
+from urllib.parse import urlparse, urlunparse, unquote
+from contextlib import closing
+from urllib.parse import urlparse, unquote, urlunparse
 import sqlite3
 import os
 import secrets
 import datetime
 import io
-import pandas as pd
 import sys
-from contextlib import closing
+import pandas as pd
+import psycopg2
+from flask import (
+    Flask, render_template, request, redirect, url_for, session,
+    abort, flash, send_file, g
+)
+from flask_wtf.csrf import CSRFProtect, validate_csrf, CSRFError
+from psycopg2.extras import DictCursor
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 csrf = CSRFProtect(app)
-UPLOAD_FOLDER = 'd:/python/db/project_files'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-app.secret_key = secrets.token_urlsafe(32)
-app.config['DATABASE'] = 'supervision.db'
+
+# 阿里云适配配置
+class AliCloudConfig:
+    # 文件存储路径（阿里云ECS建议使用/home/www作为根目录）
+    BASE_DIR = '/home/www/supervision_system'
+    UPLOAD_FOLDER = os.path.join(BASE_DIR, 'instance/project_files')
+    # 数据库SSL配置
+    DB_SSL_MODE = 'require'  # 阿里云数据库强制SSL
+    DB_SSL_ROOT_CERT = os.path.join(BASE_DIR, 'aliyun_root.crt')  # SSL证书路径
+
+# 确保目录存在
+os.makedirs(AliCloudConfig.UPLOAD_FOLDER, exist_ok=True)
+
+app.secret_key = os.environ.get('SECRET_KEY', secrets.token_urlsafe(32))
 app.config.update(
-    WTF_CSRF_ENABLED=True,
-    WTF_CSRF_CHECK_DEFAULT=True,
-    SECRET_KEY=os.environ.get('SECRET_KEY', 'your-secret-key-here')
+    DATABASE=os.environ.get('DATABASE_URL', 'sqlite:///instance/supervision.db'),
+    UPLOAD_FOLDER=AliCloudConfig.UPLOAD_FOLDER,
+    WTF_CSRF_TIME_LIMIT=7200,
+    # 安全配置
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    PREFERRED_URL_SCHEME='https',
+    WTF_CSRF_ENABLED=True  # 阿里云必须启用CSRF保护
 )
 
-print(f"Python解释器路径: {sys.executable}")
-try:
-    import openpyxl
+def get_db():
+    if not hasattr(g, '_database'):
+        db_url = app.config['DATABASE']
+        
+        # 统一处理阿里云数据库连接
+        if db_url.startswith('postgres://') or db_url.startswith('postgresql://'):
+            try:
+                # 强制转换为postgresql://格式
+                db_url = db_url.replace("postgres://", "postgresql://", 1)
+                
+                # 添加SSL参数
+                parsed = urlparse(db_url)
+                query_params = "sslmode={}&sslrootcert={}".format(
+                    AliCloudConfig.DB_SSL_MODE,
+                    AliCloudConfig.DB_SSL_ROOT_CERT
+                )
+                if parsed.query:
+                    new_query = f"{parsed.query}&{query_params}"
+                else:
+                    new_query = query_params
+                
+                parsed = parsed._replace(query=new_query)
+                db_url = urlunparse(parsed)
 
-    print(f"成功导入openpyxl版本：{openpyxl.__version__}")
-except ImportError as e:
-    print("openpyxl导入失败:", e)
+                # 增强的数据库连接配置
+                conn = psycopg2.connect(
+                    db_url,
+                    connect_timeout=10,
+                    keepalives=1,
+                    keepalives_idle=30,
+                    keepalives_interval=10,
+                    keepalives_count=5
+                )
+                conn.autocommit = False
+                g._database = conn
+                init_postgres_schema(conn)
+                print(f"Successfully connected to Alibaba Cloud PostgreSQL")
+                return conn
 
-app.config.update(
-    WTF_CSRF_ENABLED=True,
-    WTF_CSRF_CHECK_DEFAULT=True,
-    WTF_CSRF_TIME_LIMIT=7200
-)
+            except Exception as e:
+                print(f"PostgreSQL connection failed: {str(e)}")
+                print("Falling back to SQLite...")
 
-app.jinja_env.globals['enumerate'] = enumerate
-app.jinja_env.globals['datetime'] = datetime
+        # SQLite回退逻辑（阿里云ECS本地存储）
+        sqlite_path = os.path.join(AliCloudConfig.BASE_DIR, 'instance/supervision.db')
+        os.makedirs(os.path.dirname(sqlite_path), exist_ok=True)
+        g._database = sqlite3.connect(sqlite_path)
+        g._database.row_factory = sqlite3.Row
+        init_sqlite_schema(g._database)
+        print(f"Using SQLite database at: {sqlite_path}")
+            
+    return g._database
+
+def init_postgres_schema(conn):
+    with conn.cursor() as cur:
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username TEXT NOT NULL UNIQUE,
+                password TEXT NOT NULL,
+                phone TEXT,
+                is_admin BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS unfinished_projects (
+                id SERIAL PRIMARY KEY,
+                category TEXT NOT NULL,
+                project_name TEXT NOT NULL,
+                main_work TEXT NOT NULL,
+                work_goal TEXT NOT NULL,
+                completion_time DATE NOT NULL,
+                responsible_person_id INTEGER REFERENCES users(id),
+                responsible_department TEXT NOT NULL,
+                collaborator TEXT,
+                collaborating_department TEXT,
+                responsible_leader_id INTEGER REFERENCES users(id),
+                is_finished BOOLEAN DEFAULT FALSE,
+                completion_status_1 TEXT,
+                completion_status_2 TEXT,
+                completion_status_3 TEXT,
+                completion_status_4 TEXT,
+                completion_status_5 TEXT,
+                completion_status_6 TEXT,
+                completion_status_7 TEXT,
+                completion_status_8 TEXT,
+                completion_status_9 TEXT,
+                completion_status_10 TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS finished_projects (
+                id SERIAL PRIMARY KEY,
+                original_id INTEGER,
+                category TEXT NOT NULL,
+                project_name TEXT NOT NULL,
+                main_work TEXT NOT NULL,
+                work_goal TEXT NOT NULL,
+                completion_time DATE NOT NULL,
+                responsible_person_id INTEGER REFERENCES users(id),
+                responsible_department TEXT NOT NULL,
+                collaborator TEXT,
+                collaborating_department TEXT,
+                responsible_leader_id INTEGER REFERENCES users(id),
+                completion_status_1 TEXT,
+                completion_status_2 TEXT,
+                completion_status_3 TEXT,
+                completion_status_4 TEXT,
+                completion_status_5 TEXT,
+                completion_status_6 TEXT,
+                completion_status_7 TEXT,
+                completion_status_8 TEXT,
+                completion_status_9 TEXT,
+                completion_status_10 TEXT,
+                completion_time_finished DATE,
+                final_summary TEXT,
+                summary_status TEXT CHECK(summary_status IN ('pending', 'approved', 'rejected')),
+                summary_submitted_at TIMESTAMP,
+                summary_reviewed_at TIMESTAMP,
+                review_comment TEXT
+            )
+        ''')
+
+        try:
+            cur.execute("SELECT id FROM users WHERE username = 'admin'")
+            if not cur.fetchone():
+                hashed_password = generate_password_hash(
+                    os.environ.get('ADMIN_PASSWORD', 'admin123gg')
+                )
+                cur.execute('''
+                    INSERT INTO users 
+                        (username, password, phone, is_admin)
+                    VALUES 
+                        (%s, %s, %s, TRUE)
+                ''', (
+                    'admin',
+                    hashed_password,
+                    os.environ.get('ADMIN_PHONE', '13800138000')
+                ))
+            conn.commit()
+        except Exception as e:
+            print(f'初始化管理员账户失败: {str(e)}')
+            conn.rollback()
+
+def init_sqlite_schema(conn):
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            password TEXT NOT NULL,
+            phone TEXT,
+            is_admin INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS unfinished_projects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL,
+            project_name TEXT NOT NULL,
+            main_work TEXT NOT NULL,
+            work_goal TEXT NOT NULL,
+            completion_time DATE NOT NULL,
+            responsible_person_id INTEGER REFERENCES users(id),
+            responsible_department TEXT NOT NULL,
+            collaborator TEXT,
+            collaborating_department TEXT,
+            responsible_leader_id INTEGER REFERENCES users(id),
+            is_finished INTEGER DEFAULT 0 CHECK(is_finished IN (0, 1)),
+            completion_status_1 TEXT,
+            completion_status_2 TEXT,
+            completion_status_3 TEXT,
+            completion_status_4 TEXT,
+            completion_status_5 TEXT,
+            completion_status_6 TEXT,
+            completion_status_7 TEXT,
+            completion_status_8 TEXT,
+            completion_status_9 TEXT,
+            completion_status_10 TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS finished_projects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            original_id INTEGER,
+            category TEXT NOT NULL,
+            project_name TEXT NOT NULL,
+            main_work TEXT NOT NULL,
+            work_goal TEXT NOT NULL,
+            completion_time DATE NOT NULL,
+            responsible_person_id INTEGER REFERENCES users(id),
+            responsible_department TEXT NOT NULL,
+            collaborator TEXT,
+            collaborating_department TEXT,
+            responsible_leader_id INTEGER REFERENCES users(id),
+            completion_status_1 TEXT,
+            completion_status_2 TEXT,
+            completion_status_3 TEXT,
+            completion_status_4 TEXT,
+            completion_status_5 TEXT,
+            completion_status_6 TEXT,
+            completion_status_7 TEXT,
+            completion_status_8 TEXT,
+            completion_status_9 TEXT,
+            completion_status_10 TEXT,
+            completion_time_finished DATE,
+            final_summary TEXT,
+            summary_status TEXT CHECK(summary_status IN ('pending', 'approved', 'rejected')),
+            summary_submitted_at TIMESTAMP,
+            summary_reviewed_at TIMESTAMP,
+            review_comment TEXT
+        )
+    ''')
+    conn.commit()
+
+    try:
+        cursor = conn.cursor()
+        admin_exists = cursor.execute(
+            "SELECT id FROM users WHERE username = 'admin'"
+        ).fetchone()
+        
+        if not admin_exists:
+            hashed_password = generate_password_hash('admin123gg')
+            cursor.execute('''
+                INSERT INTO users (username, password, phone, is_admin)
+                VALUES (?, ?, ?, 1)
+            ''', ('admin', hashed_password, '13800138000'))
+        conn.commit()
+    except Exception as e:
+        print(f'初始化管理员账户失败: {str(e)}')
+        conn.rollback()
 
 def format_datetime(value, format='%Y-%m-%d'):
     if isinstance(value, str):
@@ -52,143 +298,7 @@ def format_datetime(value, format='%Y-%m-%d'):
     return value
 
 app.jinja_env.filters['dateformat'] = format_datetime
-
-def get_db():
-    if not hasattr(g, '_database'):
-        os.makedirs('instance', exist_ok=True)
-        g._database = sqlite3.connect(app.config['DATABASE'])
-        g._database.row_factory = sqlite3.Row
-
-        # 创建表结构
-        g._database.execute('''
-            CREATE TABLE IF NOT EXISTS unfinished_projects (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                category TEXT NOT NULL,
-                project_name TEXT NOT NULL,
-                main_work TEXT NOT NULL,
-                work_goal TEXT NOT NULL,
-                completion_time DATE NOT NULL,
-                responsible_person_id INTEGER,
-                responsible_department TEXT NOT NULL,
-                collaborator TEXT,
-                collaborating_department TEXT,
-                responsible_leader_id INTEGER,
-                is_finished BOOLEAN DEFAULT 0,
-                completion_status_1 TEXT,
-                completion_status_2 TEXT,
-                completion_status_3 TEXT,
-                completion_status_4 TEXT,
-                completion_status_5 TEXT,
-                completion_status_6 TEXT,
-                completion_status_7 TEXT,
-                completion_status_8 TEXT,
-                completion_status_9 TEXT,
-                completion_status_10 TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(responsible_person_id) REFERENCES users(id),
-                FOREIGN KEY(responsible_leader_id) REFERENCES users(id)
-            )
-        ''')
-        g._database.commit()
-    return g._database
-
-
-def init_db():
-    with closing(get_db()) as conn:
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS users
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                     username TEXT NOT NULL UNIQUE,
-                     password TEXT NOT NULL,
-                     phone TEXT,
-                     is_admin INTEGER DEFAULT 0,
-                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-
-        try:
-            admin_exists = c.execute("SELECT id FROM users WHERE username='admin'").fetchone()
-            if not admin_exists:
-                hashed_password = generate_password_hash('admin123')
-                c.execute('''
-                    INSERT INTO users (username, password, is_admin) 
-                    VALUES (?, ?, 1)
-                ''', ('admin', hashed_password))
-                conn.commit()
-        except Exception as e:
-            print(f"初始化管理员账户失败: {str(e)}")
-            conn.rollback()
-
-        c.execute('''CREATE TABLE IF NOT EXISTS unfinished_projects
-                     (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        category TEXT NOT NULL,
-                        project_name TEXT NOT NULL,
-                        main_work TEXT NOT NULL,
-                        work_goal TEXT NOT NULL,
-                        completion_time DATE NOT NULL,
-                        responsible_person_id INTEGER,
-                        responsible_department TEXT NOT NULL,
-                        collaborator TEXT,
-                        collaborating_department TEXT,
-                        responsible_leader_id INTEGER,
-                        is_finished INTEGER DEFAULT 0 CHECK(is_finished IN (0, 1)),
-                        completion_status_1 TEXT,
-                        completion_status_2 TEXT,
-                        completion_status_3 TEXT,
-                        completion_status_4 TEXT,
-                        completion_status_5 TEXT,
-                        completion_status_6 TEXT,
-                        completion_status_7 TEXT,
-                        completion_status_8 TEXT,
-                        completion_status_9 TEXT,
-                        completion_status_10 TEXT
-                      )''')
-
-        c.execute('''CREATE TABLE IF NOT EXISTS finished_projects
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                     original_id INTEGER,
-                     category TEXT NOT NULL,
-                     project_name TEXT NOT NULL,
-                     main_work TEXT NOT NULL,
-                     work_goal TEXT NOT NULL,
-                     completion_time DATE NOT NULL,
-                     responsible_person_id INTEGER,
-                     responsible_department TEXT NOT NULL,
-                     collaborator TEXT,
-                     collaborating_department TEXT,
-                     responsible_leader_id INTEGER,
-                     completion_status_1 TEXT,
-                     completion_status_2 TEXT,
-                     completion_status_3 TEXT,
-                     completion_status_4 TEXT,
-                     completion_status_5 TEXT,
-                     completion_status_6 TEXT,
-                     completion_status_7 TEXT,
-                     completion_status_8 TEXT,
-                     completion_status_9 TEXT,
-                     completion_status_10 TEXT,
-                     completion_time_finished DATE,
-                     final_summary TEXT,
-                     summary_status TEXT CHECK(summary_status IN ('pending', 'approved', 'rejected')) DEFAULT 'pending',
-                     review_comment TEXT,
-                     summary_submitted_at TIMESTAMP,
-                     summary_reviewed_at TIMESTAMP)''')
-
-        c.execute("PRAGMA table_info(finished_projects)")
-        columns = [col[1] for col in c.fetchall()]
-        for column in ['final_summary', 'summary_status', 'review_comment', 
-                      'summary_submitted_at', 'summary_reviewed_at']:
-            if column not in columns:
-                c.execute(f'ALTER TABLE finished_projects ADD COLUMN {column} TEXT')
-        conn.commit()
-
-        admin_exists = c.execute("SELECT id FROM users WHERE username='admin'").fetchone()
-        if not admin_exists:
-            hashed_password = generate_password_hash('admin123')
-            c.execute('''
-                INSERT INTO users (username, password, is_admin) 
-                VALUES (?, ?, 1)
-            ''', ('admin', hashed_password))
-            conn.commit()
+app.jinja_env.globals.update(enumerate=enumerate, datetime=datetime)
 
 def admin_required(f):
     @wraps(f)
@@ -197,7 +307,6 @@ def admin_required(f):
             abort(403)
         return f(*args, **kwargs)
     return decorated_function
-
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -215,24 +324,15 @@ def login():
             try:
                 c.execute("SELECT id, password, is_admin FROM users WHERE username = ?", (username,))
                 user = c.fetchone()
-                print(f"查询用户结果: {user}")
-                if user:
-                    print(f"存储的哈希密码: {user[1]}") 
-                    print(f"输入密码验证结果: {check_password_hash(user[1], password)}")
-            except sqlite3.OperationalError as e:
-                print(f"数据库操作错误: {str(e)}")
-                user = None
-
-        if user and check_password_hash(user[1], password):
-            session.clear()
-            session['user_id'] = user[0]
-            session['is_admin'] = user[2]
-            return redirect(next_url or url_for('index'))
-
-        return render_template('login.html', error='用户名或密码错误', current_datetime=current_datetime)
-    next_url = request.args.get('next', '')
+                if user and check_password_hash(user[1], password):
+                    session.clear()
+                    session['user_id'] = user[0]
+                    session['is_admin'] = user[2]
+                    return redirect(next_url or url_for('index'))
+            except Exception as e:
+                print(f"数据库查询错误: {str(e)}")
+            return render_template('login.html', error='用户名或密码错误', current_datetime=current_datetime)
     return render_template('login.html', current_datetime=current_datetime)
-
 
 @app.route('/')
 def index():
@@ -242,17 +342,14 @@ def index():
     return render_template('index.html', current_datetime=current_datetime)
 
 @app.route('/user_management', methods=['GET', 'POST'])
+@admin_required
 def user_management():
     current_datetime = datetime.datetime.now()
-    if 'user_id' not in session or not session.get('is_admin'):
-        abort(403)
-
     error = None
     with get_db() as conn:
         if request.method == 'POST':
-            # 文件下载处理
             if 'download_users' in request.form:
-                 try:
+                try:
                     validate_csrf(request.form.get('csrf_token'))
                     filename = request.form.get('filename', 'users').strip() or 'users'
                     filename += '.xlsx'
@@ -269,17 +366,12 @@ def user_management():
                         download_name=filename,
                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                     )
-                 except Exception as e:  # 修复此处缩进
+                except Exception as e:
                     flash(f'生成用户数据失败: {str(e)}', 'error')
 
-            # 文件上传处理（已修复部分）
             if 'upload_users' in request.form:
                 try:
                     validate_csrf(request.form.get('csrf_token'))
-                    if 'file' not in request.files:
-                        flash('请选择要上传的文件', 'error')
-                        return redirect(request.url)
-                        
                     file = request.files['file']
                     if file.filename == '':
                         flash('没有选择文件', 'error')
@@ -289,21 +381,12 @@ def user_management():
                         flash('仅支持Excel文件（.xlsx/.xls）', 'error')
                         return redirect(request.url)
 
-                    try:
-                        df = pd.read_excel(file)
-                    except Exception as e:
-                        flash(f'文件读取失败: {str(e)}', 'error')
-                        return redirect(request.url)
-                        
+                    df = pd.read_excel(file)
                     required_columns = ['username', 'password']
                     if not all(col in df.columns for col in required_columns):
                         flash('Excel文件必须包含username和password列', 'error')
                         return redirect(request.url)
                         
-                    if df['username'].isnull().any():
-                        flash('username列不能有空值', 'error')
-                        return redirect(request.url)
-
                     df['password'] = df['password'].apply(
                         lambda x: generate_password_hash(str(x)) if pd.notnull(x) else None
                     )
@@ -321,16 +404,12 @@ def user_management():
                 except Exception as e:
                     flash(f'上传失败: {str(e)}', 'error')
 
-            # 用户管理操作
             try:
                 if 'add_user' in request.form:
                     username = request.form.get('username', '').strip()
                     password = request.form.get('password', '123456').strip()
                     phone = request.form.get('phone', '').strip()
                     is_admin = 1 if request.form.get('is_admin') == '1' else 0
-
-                    if not username:
-                        raise ValueError("用户名不能为空")
 
                     hashed_pw = generate_password_hash(password)
                     conn.execute(
@@ -371,7 +450,6 @@ def user_management():
             except Exception as e:
                 error = str(e)
             
-        # 获取用户列表
         users = conn.execute("SELECT id, username, phone, is_admin FROM users").fetchall()
 
     return render_template('user_management.html', 
@@ -2003,19 +2081,31 @@ def not_found(error):
     current_datetime = datetime.datetime.now()
     return render_template('error.html', message="页面不存在", current_datetime=current_datetime), 404
 
+@app.teardown_appcontext
+def close_db(error):
+    if hasattr(g, '_database'):
+        g._database.close()
 
 @app.cli.command('init-db')
 def init_db_command():
     """Initialize the database."""
-    init_db()
-    print('Database initialized.')
-    click.echo('Initialized the database.')
-
-def init_app():
     with app.app_context():
-        init_db()
-        print("数据库初始化完成")
+        db = get_db()
+        if app.config['DATABASE'].startswith('sqlite:///'):
+            init_sqlite_schema(db)
+        else:
+            init_postgres_schema(db)
+        print(f"Initialized database: {app.config['DATABASE']}")
 
 if __name__ == '__main__':
-    init_app() 
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    os.makedirs('instance', exist_ok=True)
+    with app.app_context():
+        try:
+            db = get_db() 
+            print("Database connection established")
+        except Exception as e:
+            print(f"Database initialization failed: {str(e)}")
+            print("Continuing with potential limited functionality...")
+    
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
