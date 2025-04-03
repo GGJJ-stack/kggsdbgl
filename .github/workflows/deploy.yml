@@ -1,0 +1,24 @@
+name: Auto Deploy
+on:
+  push:
+    branches: [ main ]  # 监听main分支的push事件‌:ml-citation{ref="1,2" data="citationList"}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4  # 检出仓库代码‌:ml-citation{ref="1,3" data="citationList"}
+
+      - name: SSH to Server & Deploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /var/www/html  
+            git pull origin main
+            npm install          
+            npm run build        
+            pm2 restart all      

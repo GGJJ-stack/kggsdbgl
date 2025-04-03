@@ -173,10 +173,18 @@
 </head>
 <body>
     <div class="container">
+        <!-- 新增全局CSRF令牌（用于AJAX请求） -->
+        <meta name="csrf-token" content="{{ csrf_token() }}">
+        
         <div class="status-bar"></div>
         <h1>控股公司督办管理系统</h1>
         
         <nav>
+            <!-- 新增导航栏表单保护 -->
+            <form id="nav-actions" style="display:none;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            </form>
+
             <div class="main-nav">
                 <a class="nav-link" href="{{ url_for('unfinished_projects') }}">未完成项目</a>
                 <a class="nav-link" href="{{ url_for('finished_projects') }}">已完成项目</a>
@@ -185,15 +193,20 @@
             
             <div class="user-nav">
                 {% if session.get('is_admin') or is_admin %}
-                    <a class="nav-link admin-badge" href="{{ url_for('user_management') }}">用户管理</a>
+                    <!-- 用户管理表单添加CSRF -->
+                    <form class="admin-form" action="{{ url_for('user_management') }}" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="nav-link admin-badge">用户管理</button>
+                    </form>
                 {% endif %}
-                <a class="nav-link" href="{{ url_for('profile') }}">个人资料</a>
-                <form class="logout-form" action="{{ url_for('logout') }}" method="POST">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                    <button type="submit" class="nav-link logout-btn">
-                        退出登录
-                    </button>
+                
+                <!-- 个人资料表单添加CSRF -->
+                <form class="profile-form" action="{{ url_for('profile') }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="nav-link">个人资料</button>
                 </form>
+
+                <!-- 退出登录表单已正确包含CSRF -->
             </div>
 
             <style>
