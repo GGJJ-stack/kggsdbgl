@@ -2,7 +2,7 @@ import os
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, abort, flash, send_file, g
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_wtf.csrf import CSRFProtect, validate_csrf, generate_csrf, CSRFError
+from flask_wtf.csrf import CSRFProtect, validate_csrf, CSRFError
 from urllib.parse import urlparse, urlunparse, unquote
 from contextlib import closing
 import sqlite3
@@ -216,8 +216,7 @@ def login():
     next_url = request.args.get('next', '')
     return render_template('login.html', 
                          current_datetime=current_datetime, 
-                         next=next_url,
-                         csrf_token=generate_csrf())
+                         next=next_url)
 
 @app.errorhandler(CSRFError)
 def handle_csrf_error(e):
@@ -341,8 +340,7 @@ def user_management():
     return render_template('user_management.html', 
                          users=users, 
                          error=error, 
-                         current_datetime=current_datetime,
-                         csrf_token=generate_csrf())
+                         current_datetime=current_datetime)
 
 @app.route('/add_user', methods=['GET', 'POST'])
 def add_user():
@@ -377,7 +375,7 @@ def add_user():
         except Exception as e:
             error = str(e)
 
-    return render_template('add_user.html', error=error, current_datetime=current_datetime,csrf_token=generate_csrf())
+    return render_template('add_user.html', error=error, current_datetime=current_datetime)
 
 @app.route('/edit_user/<int:user_id>', methods=['GET', 'POST'])
 def edit_user(user_id):
@@ -417,7 +415,7 @@ def edit_user(user_id):
 
         user = conn.execute("SELECT id, username, phone, is_admin FROM users WHERE id=?", (user_id,)).fetchone()
 
-    return render_template('edit_user.html', user=user, current_datetime=current_datetime,csrf_token=generate_csrf())
+    return render_template('edit_user.html', user=user, current_datetime=current_datetime)
 
 @app.route('/download_projects')
 def download_projects():
@@ -558,7 +556,7 @@ def add_project():
             except Exception as e:
                 error = str(e)
 
-    return render_template('add_project.html', users=users, error=error, csrf_token=generate_csrf())
+    return render_template('add_project.html', users=users, error=error)
 
 @app.route('/unfinished_projects', methods=['GET', 'POST'])
 def unfinished_projects():
@@ -674,12 +672,12 @@ def unfinished_projects():
                             validate_csrf(request.form.get('csrf_token'))
                             if 'file' not in request.files:
                                 flash('请选择文件', 'error')
-                                return redirect(url_for('unfinished_projects'))
+                                return redirect(request.url)
                             
                             file = request.files['file']
                             if file.filename == '':
                                 flash('没有选择文件', 'error')
-                                return redirect(url_for('unfinished_projects'))
+                                return redirect(request.url)
 
                             df = pd.read_excel(file, engine='openpyxl')
                             required_columns = [
@@ -690,7 +688,7 @@ def unfinished_projects():
                             if not all(col in df.columns for col in required_columns):
                                 missing = set(required_columns) - set(df.columns)
                                 flash(f'缺少必要列：{", ".join(missing)}', 'error')
-                                return redirect(url_for('unfinished_projects'))
+                                return redirect(request.url)
                             
                             existing = pd.read_sql_query(
                                 "SELECT category, project_name, main_work, work_goal FROM unfinished_projects",
@@ -760,8 +758,7 @@ def unfinished_projects():
                          projects=projects,
                          error=error,
                          is_admin=is_admin,
-                         current_date=current_datetime.strftime('%Y-%m-%d'),
-                         csrf_token=generate_csrf())
+                         current_date=current_datetime.strftime('%Y-%m-%d'))
                          
 @app.route('/project_detail/<int:project_id>', methods=['GET', 'POST'])
 def project_detail(project_id):
@@ -945,8 +942,7 @@ def project_detail(project_id):
                                'pending': ('待审核', 'warning'),
                                'approved': ('已通过', 'success'),
                                'rejected': ('已驳回', 'danger')
-                           },
-                           csrf_token=generate_csrf())
+                           })
 
 @app.route('/edit_project/<int:project_id>', methods=['GET', 'POST'])
 def edit_project(project_id):
@@ -1029,7 +1025,7 @@ def edit_project(project_id):
     return render_template('edit_project.html',
                          project=project_data,
                          users=users,
-                         current_datetime=current_datetime,csrf_token=generate_csrf())
+                         current_datetime=current_datetime)
 
 @app.route('/mark_project_finished/<int:project_id>', methods=['POST'])
 def mark_project_finished(project_id):
@@ -1190,8 +1186,7 @@ def finished_projects():
     return render_template('finished_projects.html',
                         all_entries_sorted=all_entries_sorted,
                         is_admin=is_admin,
-                        current_datetime=current_datetime,
-                        csrf_token=generate_csrf())
+                        current_datetime=current_datetime)
 
 @app.route('/finished_project_detail/<int:project_id>', methods=['GET', 'POST'])
 def finished_project_detail(project_id):
@@ -1333,8 +1328,7 @@ def finished_project_detail(project_id):
             'approved': ('已通过', 'success'),
             'rejected': ('已驳回', 'danger')
         },
-        overdue_warning=project_data['is_overdue'],
-        csrf_token=generate_csrf()
+        overdue_warning=project_data['is_overdue']
     )
 
 @app.route('/edit_finished_project/<int:project_id>', methods=['GET', 'POST'])
@@ -1394,8 +1388,7 @@ def edit_finished_project(project_id):
     return render_template('edit_finished_project.html',
                            project=project,
                            users=users,
-                           current_datetime=datetime.datetime.now(),
-                           csrf_token=generate_csrf())
+                           current_datetime=datetime.datetime.now())
 
 @app.route('/finished_projects/add', methods=['GET', 'POST'])
 @admin_required
@@ -1461,8 +1454,7 @@ def add_finished_project():
     return render_template('add_finished_project.html',
                          users=users,
                          error=error,
-                         current_datetime=current_datetime,
-                         csrf_token=generate_csrf())
+                         current_datetime=current_datetime)
 
 @app.route('/all_projects', methods=['GET', 'POST'])
 def all_projects():
@@ -1583,8 +1575,7 @@ def all_projects():
             'per_page': per_page,
             'total': total,
             'pages': (total // per_page) + (1 if total % per_page else 0)
-        },
-        csrf_token=generate_csrf()
+        }
     )
 
 @app.route('/delete_project/<int:project_id>', methods=['POST'])

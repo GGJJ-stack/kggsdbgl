@@ -6,7 +6,7 @@
     <title>登录 - 控股公司督办管理系统</title>
     <style>
         :root {
-            --mist-blue: #6C7A8B;         /* 雾霾蓝主色调 */
+            --mist-blue: #6C7A8B;         /* 莫兰迪蓝主色调 */
             --morandi-orange: #D6A779;    /* 莫兰迪橙点缀色 */
             --light-gray: #F0F4F8;         /* 浅灰背景 */
             --deep-gray: #4A5568;          /* 深灰文字 */
@@ -15,36 +15,56 @@
 
         body {
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            background: linear-gradient(135deg, var(--mist-blue) 0%, #8A9AAD 100%);
+            background: linear-gradient(135deg, rgba(108,122,139,0.1) 0%, rgba(214,167,121,0.08) 100%);
             margin: 0;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
             padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            background: 
+                radial-gradient(circle at 20% 80%, 
+                    rgba(108,122,139,0.08) 0%, 
+                    transparent 60%),
+                radial-gradient(circle at 80% 20%, 
+                    rgba(214,167,121,0.08) 0%, 
+                    transparent 60%);
+            transform: rotate(15deg);
+            z-index: -1;
         }
 
         .login-container {
-            background: rgba(255, 255, 255, 0.96);
+            background: rgba(255, 255, 255, 0.98);
             width: 100%;
             max-width: 420px;
             padding: 2.5rem;
             border-radius: 16px;
-            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
             backdrop-filter: blur(8px);
             transform: translateY(-20px);
             transition: var(--transition);
+            border: 1px solid rgba(255,255,255,0.3);
         }
 
         h1 {
             color: var(--mist-blue);
             text-align: center;
             margin: 0 0 2rem 0;
-            font-size: 2rem;
+            font-size: 2.2rem;
             font-weight: 600;
             letter-spacing: 1px;
             position: relative;
-            padding-bottom: 1rem;
+            padding-bottom: 1.2rem;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.05);
         }
 
         h1::after {
@@ -53,13 +73,15 @@
             bottom: 0;
             left: 50%;
             transform: translateX(-50%);
-            width: 60px;
+            width: 80px;
             height: 3px;
             background: var(--morandi-orange);
+            border-radius: 2px;
         }
 
         .form-group {
             margin-bottom: 1.8rem;
+            position: relative;
         }
 
         label {
@@ -68,76 +90,147 @@
             color: var(--deep-gray);
             font-weight: 500;
             font-size: 0.95rem;
+            padding-left: 8px;
+            position: relative;
+        }
+
+        label::before {
+            content: '';
+            position: absolute;
+            left: -8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 4px;
+            height: 16px;
+            background: var(--morandi-orange);
+            border-radius: 2px;
         }
 
         input[type="text"],
         input[type="password"] {
             width: 100%;
-            padding: 12px 16px;
+            padding: 14px 16px;
             border: 2px solid #E2E8F0;
-            border-radius: 8px;
+            border-radius: 10px;
             font-size: 1rem;
             color: var(--deep-gray);
             transition: var(--transition);
-            background: #F8FAFC;
+            background: rgba(255,255,255,0.9);
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.03);
         }
 
         input[type="text"]:focus,
         input[type="password"]:focus {
             border-color: var(--morandi-orange);
-            box-shadow: 0 0 0 3px rgba(214, 167, 121, 0.2);
+            box-shadow: 0 0 0 3px rgba(214, 167, 121, 0.15);
             outline: none;
+            background: #fff;
         }
 
         button {
             width: 100%;
-            padding: 14px;
+            padding: 16px;
             background: var(--morandi-orange);
             color: white;
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
             font-size: 1.05rem;
             font-weight: 600;
             cursor: pointer;
             transition: var(--transition);
             letter-spacing: 1px;
-            margin-top: 1rem;
+            margin-top: 1.5rem;
+            box-shadow: 0 4px 6px rgba(214,167,121,0.15);
+            position: relative;
+            overflow: hidden;
         }
 
         button:hover {
             background: #C89364;
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(214, 167, 121, 0.3);
+            box-shadow: 0 6px 12px rgba(214,167,121,0.25);
+        }
+
+        button::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(
+                45deg,
+                transparent,
+                rgba(255,255,255,0.2),
+                transparent
+            );
+            transform: rotate(45deg);
+            transition: var(--transition);
+        }
+
+        button:hover::after {
+            animation: shine 1.5s;
+        }
+
+        @keyframes shine {
+            0% { left: -50%; }
+            100% { left: 150%; }
         }
 
         .error-message {
             color: #C53030;
             background: #FFF5F5;
             padding: 1rem;
-            border-radius: 8px;
+            border-radius: 10px;
             margin-bottom: 1.5rem;
             border: 1px solid #FED7D7;
             font-size: 0.95rem;
+            position: relative;
+            padding-left: 2.5rem;
+        }
+
+        .error-message::before {
+            content: '!';
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 24px;
+            height: 24px;
+            background: #C53030;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
         }
 
         .datetime-info {
             text-align: center;
-            margin-top: 2rem;
+            margin-top: 2.5rem;
             color: var(--mist-blue);
             font-size: 0.9rem;
             padding-top: 1.5rem;
-            border-top: 1px solid #E2E8F0;
+            border-top: 1px solid rgba(108,122,139,0.1);
             font-weight: 500;
+            letter-spacing: 0.5px;
         }
 
         @media (max-width: 480px) {
             .login-container {
-                padding: 1.5rem;
+                padding: 1.8rem;
                 margin: 0 15px;
+                border-radius: 12px;
             }
             
             h1 {
-                font-size: 1.6rem;
+                font-size: 1.8rem;
+                padding-bottom: 1rem;
+            }
+
+            button {
+                padding: 14px;
             }
         }
     </style>
@@ -151,7 +244,7 @@
         {% endif %}
 
         <form method="POST" action="{{ url_for('login') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             
             <div class="form-group">
                 <label for="username">用户名</label>
