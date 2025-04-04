@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="csrf-token" content="{{ csrf_token }}">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>未完成项目</title>
     <style>
@@ -138,11 +138,11 @@
                     title="导入要求：&#10;• 分类需与现有分类一致&#10;• 支持自动修正大小写和空格&#10;• 日期格式为YYYY-MM-DD">
                     Excel批量导入
                 </button>
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             </form>
             
             <form method="post" id="exportForm">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="button" onclick="handleExport()" class="btn-excel">
                     Excel导出当前
                 </button>
@@ -246,14 +246,14 @@
                                 </button>
                             </form>
                             <form action="{{ url_for('delete_project', project_id=project[0]) }}" method="post" style="display: inline;">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn-action" 
                                         onclick="return confirm('确认要永久删除该项目吗？此操作不可恢复！')">
                                     删除
                                 </button>
                             </form>
                             <form action="{{ url_for('mark_project_finished', project_id=project[0]) }}" method="post" style="display: inline;">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn-action" 
                                         onclick="return confirm('确认标记该项目为已完成？')">
                                     标记完成
@@ -267,7 +267,7 @@
                         </form>
                         {% if is_admin and not project[11] %}
                         <form action="{{ url_for('mark_project_finished', project_id=project[0]) }}" method="post" style="display: inline;">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn-action" 
                                     onclick="return confirm('确认标记该项目为已完成？')">
                                 标记完成

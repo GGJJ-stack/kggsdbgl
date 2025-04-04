@@ -6,10 +6,12 @@
     <title>控股公司督办管理系统</title>
     <style>
         :root {
-            --primary-color: #2c3e50;
-            --secondary-color: #3498db;
-            --text-color: #34495e;
+            --primary-color: #6C8EBF; /* 莫兰迪蓝主色 */
+            --secondary-color: #D79B77; /* 莫兰迪橙跳色 */
+            --text-color: #4A5568; /* 深灰蓝文本 */
             --background-gradient: linear-gradient(135deg, #f8f9fa 0%, #ecf0f1 100%);
+            --nav-bg: rgba(255, 255, 255, 0.98);
+            --border-color: #CBD5E0;
         }
 
         body {
@@ -26,48 +28,64 @@
         }
 
         nav {
-            background: rgba(255, 255, 255, 0.95);
-            padding: 1rem 2rem;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            background: var(--nav-bg);
+            padding: 1rem 2.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(108, 142, 191, 0.15);
             margin-bottom: 2rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            border: 1px solid var(--border-color);
         }
 
         .main-nav {
             display: flex;
-            gap: 2rem;
+            gap: 1.5rem;
+            flex-wrap: wrap;
         }
 
         .nav-link {
             color: var(--primary-color);
             text-decoration: none;
-            padding: 0.5rem 1rem;
-            border-radius: 5px;
+            padding: 0.6rem 1.2rem;
+            border-radius: 8px;
             transition: all 0.3s ease;
-            border: 2px solid transparent;
+            background: rgba(108, 142, 191, 0.1);
+            border: 2px solid var(--border-color);
+            font-weight: 500;
         }
 
         .nav-link:hover {
             background: var(--secondary-color);
             color: white;
             transform: translateY(-2px);
+            box-shadow: 0 3px 8px rgba(215, 155, 119, 0.3);
+            border-color: transparent;
         }
 
         .user-nav {
             display: flex;
-            gap: 1.5rem;
+            gap: 1.2rem;
             align-items: center;
         }
 
         .admin-badge {
-            background: #e74c3c;
+            background: var(--primary-color);
             color: white;
-            padding: 0.3rem 0.8rem;
-            border-radius: 15px;
+            padding: 0.3rem 1rem;
+            border-radius: 20px;
             font-size: 0.9em;
+            position: relative;
+            padding-right: 2.2em;
+        }
+
+        .admin-badge::after {
+            content: "⚙️";
+            position: absolute;
+            right: 0.6em;
+            top: 50%;
+            transform: translateY(-50%);
         }
 
         h1 {
@@ -75,183 +93,84 @@
             text-align: center;
             margin-bottom: 2rem;
             font-size: 2.5rem;
+            letter-spacing: 1px;
+        }
+
+        .content-container {
+            background: var(--nav-bg);
+            border-radius: 12px;
+            box-shadow: 0 6px 15px rgba(108, 142, 191, 0.1);
+            padding: 2.5rem;
+            margin-top: 1.5rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .status-bar {
+            height: 4px;
+            background: linear-gradient(90deg, 
+                var(--primary-color) 30%, 
+                var(--secondary-color) 70%);
+            margin-bottom: 2rem;
+            border-radius: 2px;
         }
 
         @media (max-width: 768px) {
             nav {
                 flex-direction: column;
                 gap: 1rem;
-                padding: 1rem;
+                padding: 1.2rem;
             }
             
             .main-nav {
-                flex-wrap: wrap;
                 justify-content: center;
+                gap: 1rem;
             }
             
             .nav-link {
                 font-size: 0.9rem;
-                padding: 0.4rem 0.8rem;
+                padding: 0.5rem 1rem;
             }
         }
-
-        <style>
-            /* 新增色彩变量 */
-            :root {
-                --success-color: #27ae60;
-                --warning-color: #f1c40f;
-                --hover-bg: rgba(52, 152, 219, 0.1);
-            }
-
-            /* 优化导航栏间距 */
-            nav {
-                padding: 1rem 2.5rem; /* 增加水平内边距 */
-            }
-
-            /* 增强按钮交互效果 */
-            .nav-link {
-                position: relative;
-                overflow: hidden;
-                transition: transform 0.2s ease, background 0.3s ease;
-            }
-
-            .nav-link::after {
-                content: '';
-                position: absolute;
-                bottom: -2px;
-                left: 0;
-                width: 0;
-                height: 2px;
-                background: var(--secondary-color);
-                transition: width 0.3s ease;
-            }
-
-            .nav-link:hover::after {
-                width: 100%;
-            }
-
-            /* 新增内容容器样式 */
-            .content-container {
-                background: white;
-                border-radius: 12px;
-                box-shadow: 0 6px 15px rgba(0, 0, 0, 0.08);
-                padding: 2rem;
-                margin-top: 1.5rem;
-            }
-
-            /* 优化退出按钮样式 */
-            .nav-link[type="submit"] {
-                font: inherit;
-                color: inherit;
-            }
-
-            /* 新增状态指示条 */
-            .status-bar {
-                height: 4px;
-                background: linear-gradient(90deg, 
-                    var(--primary-color) 30%, 
-                    var(--secondary-color) 70%);
-                margin-bottom: 2rem;
-                border-radius: 2px;
-            }
-
-            /* 增强管理员徽章 */
-            .admin-badge {
-                position: relative;
-                padding-right: 2em;
-            }
-
-            .admin-badge::after {
-                content: "⚙️";
-                position: absolute;
-                right: 0.5em;
-                top: 50%;
-                transform: translateY(-50%);
-            }
-        </style>
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- 修正全局CSRF令牌 -->
         <meta name="csrf-token" content="{{ csrf_token }}">
         
-        <!-- 修正导航栏隐藏表单 -->
-        <form id="nav-actions" style="display:none;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        </form>
-        
-        <!-- 修正用户管理表单 -->
-        <form class="admin-form" action="{{ url_for('user_management') }}" method="POST">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button type="submit" class="nav-link admin-badge">用户管理</button>
-        </form>
-        
-        <!-- 修正个人资料表单 -->
-        <form class="profile-form" action="{{ url_for('profile') }}" method="POST">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button type="submit" class="nav-link">个人资料</button>
-        </form>
+        <nav>
+            <div class="main-nav">
+                <!-- 新增核心导航按钮 -->
+                <a href="{{ url_for('unfinished_projects') }}" class="nav-link">未完成项目</a>
+                <a href="{{ url_for('finished_projects') }}" class="nav-link">已完成项目</a>
+                <a href="{{ url_for('all_projects') }}" class="nav-link">全部项目</a>
+            </div>
 
-        <!-- 退出登录表单已正确包含CSRF -->
+            <div class="user-nav">
+                {% if session.get('is_admin') %}
+                <form class="admin-form" action="{{ url_for('user_management') }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="nav-link admin-badge">用户管理</button>
+                </form>
+                {% endif %}
+                
+                <form class="profile-form" action="{{ url_for('profile') }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="nav-link">个人资料</button>
+                </form>
+
+                <form action="{{ url_for('logout') }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="nav-link">退出登录</button>
+                </form>
+            </div>
+        </nav>
+
+        <div class="status-bar"></div>
+
+        <div class="content-container">
+            <h2>欢迎使用督办管理系统</h2>
+            <p>当前系统状态：运行正常 | 今日日期：{{ current_datetime.strftime('%Y-%m-%d') }}</p>
+        </div>
     </div>
-
-    <style>
-        :root {
-            --primary-color: #6C8EBF; /* 莫兰迪蓝主色 */
-            --secondary-color: #D79B77; /* 莫兰迪橙跳色 */
-            --text-color: #4A5568; /* 深灰蓝文本 */
-            --nav-bg: rgba(255, 255, 255, 0.98); /* 纯白导航背景 */
-            --border-color: #CBD5E0; /* 浅灰蓝边框 */
-        }
-
-        nav {
-            background: var(--nav-bg);
-            box-shadow: 0 4px 15px rgba(108, 142, 191, 0.15);
-            border: 1px solid var(--border-color);
-        }
-
-        .nav-link {
-            color: var(--primary-color);
-            border: 2px solid var(--border-color);
-            background: rgba(108, 142, 191, 0.05);
-        }
-
-        .nav-link:hover {
-            background: var(--secondary-color);
-            color: white;
-            border-color: transparent;
-        }
-
-        .admin-badge {
-            background: var(--primary-color);
-            color: white;
-        }
-
-        .status-bar {
-            background: linear-gradient(90deg, 
-                var(--primary-color) 30%, 
-                var(--secondary-color) 70%);
-        }
-
-        .content-container {
-            background: var(--nav-bg);
-            border: 1px solid var(--border-color);
-            box-shadow: 0 6px 15px rgba(108, 142, 191, 0.1);
-        }
-
-        /* 保留原有交互效果 */
-        .nav-link::after {
-            background: var(--secondary-color);
-        }
-    </style>
-</nav>
-
-<!-- 优化内容容器 -->
-<div class="content-container">
-    <h2>欢迎使用</h2>
-    <p>当前系统状态：运行正常</p>
-    <!-- 后续内容可在此添加 -->
-</div>
-</div>
+</body>
 </html>

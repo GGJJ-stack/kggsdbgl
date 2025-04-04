@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -6,11 +5,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <div class="profile-container">  <!-- 新增容器 -->
+    <div class="profile-container">
         <h2 class="profile-title">个人信息修改</h2>
         <form method="post" class="profile-form">
-            <!-- 修正 CSRF 令牌的语法 -->
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             
             <div class="form-group">
                 <label for="password">新密码:</label>
