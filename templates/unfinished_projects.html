@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>未完成项目</title>
     <style>
@@ -93,7 +93,6 @@
     </style>
 </head>
 <style>
-    /* 在现有按钮样式后添加新样式 */
     .btn-main {
         background-color: #6C8EBF !important;
         border-color: #5B7CAD !important;
@@ -111,17 +110,17 @@
         box-shadow: 0 3px 8px rgba(108, 142, 191, 0.3);
     }
     .duplicate {
-        color: #888 !important; /* 浅灰色 */
+        color: #888 !important;
     }
     .duplicate.overdue {
-        color: #ffb3b3 !important; /* 浅红色 */
+        color: #ffb3b3 !important;
     }
 </style>
 
 <body>
     <h1>未完成项目列表 - {{ current_date }}</h1>
     
-    {% if not is_admin %}  {# 新增普通用户按钮区域 #}
+    {% if not is_admin %}
     <div class="user-tools" style="text-align: right; margin-bottom: 20px;">
         <a href="{{ url_for('index') }}" class="btn-main">
             返回主菜单
@@ -129,7 +128,7 @@
     </div>
     {% endif %}
 
-    {% if is_admin %}  {# 原有管理员工具区保持不变 #}
+    {% if is_admin %}
     <div class="admin-tools">
         <div style="margin: 10px 0; display: flex; gap: 10px; align-items: center;">
             <form method="post" enctype="multipart/form-data">
@@ -139,12 +138,11 @@
                     title="导入要求：&#10;• 分类需与现有分类一致&#10;• 支持自动修正大小写和空格&#10;• 日期格式为YYYY-MM-DD">
                     Excel批量导入
                 </button>
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             </form>
             
-            <!-- 修改导出表单 -->
             <form method="post" id="exportForm">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button type="button" onclick="handleExport()" class="btn-excel">
                     Excel导出当前
                 </button>
@@ -186,7 +184,6 @@
             </tr>
         </thead>
         <tbody>
-            {# 修复命名空间初始化和分组逻辑 #}
             {% set ns = namespace(
                 entries={},
                 category_groups={},
@@ -194,7 +191,6 @@
                 main_work_groups={}
             ) %}
             
-            {# 预处理分组信息 #}
             {% for project in projects %}
                 {% set category = project[1] %}
                 {% if category not in ns.category_groups %}
@@ -213,13 +209,11 @@
             {% endfor %}
 
             {% for project in projects %}
-                {# 标准化字段并生成entry_key #}
                 {% set main_work = project[3]|trim|lower %}
                 {% set work_target = project[4]|trim|lower %}
                 {% set responsible_person = project[6]|trim|lower %}
                 {% set entry_key = [main_work, work_target, responsible_person]|join('|') %}
                 
-                {# 修复重复判断逻辑 #}
                 {% set is_duplicate = entry_key in ns.entries %}
                 {% if not is_duplicate %}
                     {% set _ = ns.entries.update({entry_key: true}) %}
@@ -227,7 +221,6 @@
                 
                 <tr class="{% if project[11] == '逾期' %}overdue{% endif %} {% if is_duplicate %}duplicate{% endif %}">
                     <td>{{ loop.index }}</td>
-                    {# 修正行合并逻辑 #}
                     {% if loop.index0 == ns.category_groups[project[1]]-1 %}
                         <td rowspan="{{ projects|selectattr('1', 'equalto', project[1])|list|count }}">{{ project[1] }}</td>
                     {% endif %}
@@ -253,17 +246,17 @@
                                 </button>
                             </form>
                             <form action="{{ url_for('delete_project', project_id=project[0]) }}" method="post" style="display: inline;">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                 <button type="submit" class="btn-action" 
                                         onclick="return confirm('确认要永久删除该项目吗？此操作不可恢复！')">
                                     删除
                                 </button>
                             </form>
                             <form action="{{ url_for('mark_project_finished', project_id=project[0]) }}" method="post" style="display: inline;">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                 <button type="submit" class="btn-action" 
-                                        onclick="return confirm('确认该项目已完成？')">
-                                    确定完成
+                                        onclick="return confirm('确认标记该项目为已完成？')">
+                                    标记完成
                                 </button>
                             </form>
                         {% endif %}
@@ -273,8 +266,8 @@
                             </button>
                         </form>
                         {% if is_admin and not project[11] %}
-                        <form action="{{ url_for('mark_project_finished', project_id=project[0]) }}" method="post">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <form action="{{ url_for('mark_project_finished', project_id=project[0]) }}" method="post" style="display: inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <button type="submit" class="btn-action" 
                                     onclick="return confirm('确认标记该项目为已完成？')">
                                 标记完成
@@ -286,11 +279,8 @@
             {% endfor %}
         </tbody>
     </table>
-</body>
-</html>
 
 <script>
-// 新增导出处理函数
 function handleExport() {
     const formData = new FormData(document.getElementById('exportForm'));
     
@@ -318,10 +308,9 @@ function handleExport() {
     });
 }
 
-// 修改后的文件验证函数
 function validateImportFile(input) {
     const allowedTypes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
-    const maxSize = 5 * 1024 * 1024; // 5MB
+    const maxSize = 5 * 1024 * 1024;
     
     if (!allowedTypes.includes(input.files[0].type)) {
         alert('错误：仅支持.xlsx格式文件');
@@ -335,12 +324,10 @@ function validateImportFile(input) {
         return false;
     }
     
-    // 新增分类格式提示
     const confirmation = confirm('请确保文件中包含"category"列，且分类名称与系统现有分类一致（不区分大小写和空格）');
     return confirmation;
 }
 
-// 增强错误处理
 function handleImportError(error) {
     console.error('导入失败:', error);
     if(error.includes('category')) {
@@ -350,3 +337,5 @@ function handleImportError(error) {
     }
 }
 </script>
+</body>
+</html>

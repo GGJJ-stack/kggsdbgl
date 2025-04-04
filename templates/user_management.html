@@ -82,12 +82,11 @@
             color: white;
             border-color: #27ae60;
         }
-    </style>
-    <style>
+
+        /* 新增样式 */
         body {
-            background-color: #F5F7FA !important; /* 统一背景色 */
+            background-color: #F5F7FA !important;
         }
-        
         h1 {
             background: linear-gradient(135deg, #6C8EBF 0%, #5B7CAD 100%) !important;
             box-shadow: 0 4px 15px rgba(108, 142, 191, 0.2) !important;
@@ -97,58 +96,73 @@
             border: none;
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
-    
         table {
-            background: #E1E8F0 !important; /* 表格背景色 */
+            background: #E1E8F0 !important;
             border: 2px solid #6C8EBF !important;
             box-shadow: 0 6px 15px rgba(108, 142, 191, 0.1) !important;
         }
-    
         th {
-            background-color: #6C8EBF !important; /* 表头主色 */
+            background-color: #6C8EBF !important;
             border-color: #5B7CAD !important;
         }
-    
         tr:nth-child(even) {
-            background-color: #F0F4F9 !important; /* 更浅的交替色 */
+            background-color: #F0F4F9 !important;
         }
-    
         button {
             background-color: #6C8EBF !important;
             border: 1px solid #5B7CAD !important;
             box-shadow: 0 2px 4px rgba(108, 142, 191, 0.15) !important;
         }
-    
         button:hover {
             background-color: #5B7CAD !important;
             box-shadow: 0 3px 8px rgba(92, 129, 175, 0.25) !important;
         }
-    
         form[method="post"] button {
-            background-color: #3A5A8B !important; /* 删除按钮深色 */
+            background-color: #3A5A8B !important;
             border-color: #2A4A7B !important;
         }
-    
         form[method="post"] button:hover {
             background-color: #2A4A7B !important;
         }
-    
         .error {
             background: #FFEDED;
             border-color: #FFD6D6;
             color: #B00020;
         }
-    
         input[type="submit"] {
             background-color: #6C8EBF !important;
             border-color: #5B7CAD !important;
+        }
+        h1 {
+            background: linear-gradient(135deg, #6C8EBF 0%, #D79B77 100%) !important;
+            border-bottom: 3px solid #D79B77 !important;
+        }
+        th {
+            border-bottom: 2px solid #D79B77 !important;
+        }
+        .btn-excel:hover,
+        .btn-action:hover {
+            background-color: #D79B77 !important;
+            border-color: #C48965 !important;
+        }
+        form[method="post"] button {
+            background-color: #D79B77 !important;
+            border-color: #C48965 !important;
+        }
+        form[method="post"] button:hover {
+            background-color: #B76E79 !important;
+        }
+        tr:hover {
+            background-color: #FFF4EF !important;
+        }
+        table {
+            border-top: 3px solid #D79B77 !important;
         }
     </style>
 </head>
 <body>
     <h1>用户管理</h1>
 
-    <!-- 修改按钮容器和样式 -->
     <div class="admin-tools">
         <div style="margin: 10px 0; display: flex; gap: 10px; align-items: center;">
             <!-- 上传表单 -->
@@ -158,7 +172,7 @@
                 <button type="submit" name="upload_users" class="btn-excel">
                     Excel批量导入
                 </button>
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             </form>
     
             <!-- 下载按钮 -->
@@ -166,16 +180,16 @@
                 <button type="submit" name="download_users" class="btn-excel">
                     Excel导出用户
                 </button>
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             </form>
-    
+
             <!-- 添加用户按钮 -->
             <form action="{{ url_for('add_user') }}" method="get">
                 <button type="submit" class="btn-excel">
                     添加用户
                 </button>
             </form>
-    
+
             <!-- 返回按钮 -->
             <form action="{{ url_for('index') }}" method="get">
                 <button type="submit" class="btn-excel">
@@ -184,21 +198,11 @@
             </form>
         </div>
     </div>
-    
-    <!-- 删除原有.action-buttons相关样式，复用全局样式 -->
-    <style>
-        /* 复用未完成项目页面样式 */
-        .admin-tools {
-            margin-bottom: 20px;
-        }
-        .admin-tools form {
-            display: inline-block;
-            margin-right: 10px;
-        }
-    </style>
+
     {% if error %}
         <p class="error">{{ error }}</p>
     {% endif %}
+    
     <table>
         <thead>
             <tr>
@@ -217,13 +221,13 @@
                     <td>{{ user[2] }}</td>
                     <td>{{ '是' if user[3] else '否' }}</td>
                     <td>
-                        <!-- 将带有橙色边框的表单移动到循环内部 -->
                         <form action="{{ url_for('edit_user', user_id=user[0]) }}" method="get" style="display: inline; border-left: 3px solid #D79B77;">
                             <button type="submit" class="btn-action">编辑</button>
                         </form>
                         <form action="{{ url_for('user_management') }}" method="post" style="display: inline;">
                             <input type="hidden" name="user_id" value="{{ user[0] }}">
                             <input type="hidden" name="delete_user" value="1">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <button type="submit" onclick="return confirm('确定要删除该用户吗？')" class="btn-action">删除</button>
                         </form>
                     </td>
@@ -232,142 +236,4 @@
         </tbody>
     </table>
 </body>
-
-<style>
-
-    .action-buttons {
-        display: flex;
-        gap: 15px;
-        margin-bottom: 30px;
-        flex-wrap: wrap;
-        padding: 12px;
-        background: #f8f9fa;
-        border-radius: 8px;
-        box-shadow: 0 2px 8px rgba(108, 142, 191, 0.1);
-    }
-
-    /* 统一按钮容器 */
-    .action-buttons form,
-    .action-buttons button {
-        flex: 0 0 240px;
-        height: 40px;
-        margin: 0;
-        display: flex;
-        align-items: center;
-    }
-
-    .action-buttons form[enctype],
-    .action-buttons form:not([enctype]) {
-        flex: 1;
-        min-width: 200px;
-    }
-
-    /* 文件上传表单内部布局 */
-    .action-buttons form[enctype] {
-        flex: 1;
-        display: flex;
-        gap: 10px;
-    }
-
-    /* 文件输入框 */
-    input[type="file"] {
-        flex: 1;
-        width: auto;
-    }
-
-    /* 上传按钮 */
-    .action-buttons form[enctype] input[type="submit"] {
-        flex: 0 0 120px;  /* 固定按钮宽度 */
-        width: 120px;
-    }
-
-    /* 下载按钮 */
-    .action-buttons form:not([enctype]) input[type="submit"] {
-        flex: 0 0 120px;  /* 与上传按钮相同宽度 */
-        width: 120px;
-    }
-
-    /* 表单容器调整 */
-    .action-buttons form[enctype],
-    .action-buttons form:not([enctype]) {
-        flex: 0 0 auto;  /* 根据内容自动分配 */
-        min-width: 240px; /* 保持原始容器宽度 */
-    }
-    .action-buttons form[enctype] {
-        flex: 0 0 240px;
-        display: flex;
-        gap: 10px;
-        padding: 1px;         
-        align-items: center;  
-    }
-
-    input[type="file"] {
-        flex: 1;
-        height: 38px;         
-        margin: 0;
-        align-self: center;  
-    }
-
-    .action-buttons form[enctype] input[type="submit"] {
-        width: 100%;
-        height: 100%;
-        padding: 0;
-        margin: 0;
-        flex-shrink: 0;
-        box-sizing: border-box;
-    }
-
-    input[type="file"] {
-        width: calc(100% - 10px); 
-        height: 100%;
-        margin: 0;
-        border: 1px solid #5B7CAD;
-        border-radius: 4px;
-        box-sizing: border-box;
-    }
-
-    .action-buttons form:not([enctype]) input[type="submit"] {
-        width: 100%;
-        height: 100%;
-        box-sizing: border-box; 
-    }
-</style>
-
-<style>
-    /* 在原有样式基础上修改 */
-    h1 {
-        background: linear-gradient(135deg, #6C8EBF 0%, #D79B77 100%) !important;
-        border-bottom: 3px solid #D79B77 !important;
-    }
-
-    th {
-        border-bottom: 2px solid #D79B77 !important;
-    }
-
-    /* 新增橙色系按钮样式 */
-    .btn-excel:hover,
-    .btn-action:hover {
-        background-color: #D79B77 !important;
-        border-color: #C48965 !important;
-    }
-
-    /* 操作按钮配色调整 */
-    form[method="post"] button {
-        background-color: #D79B77 !important;
-        border-color: #C48965 !important;
-    }
-
-    form[method="post"] button:hover {
-        background-color: #B76E79 !important;
-    }
-
-    /* 表格行悬浮效果 */
-    tr:hover {
-        background-color: #FFF4EF !important;
-    }
-
-    /* 添加橙色装饰线 */
-    table {
-        border-top: 3px solid #D79B77 !important;
-    }
-</style>
+</html>

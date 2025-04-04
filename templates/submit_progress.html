@@ -89,7 +89,7 @@
         <div class="section">
             <h2>提交项目进度更新 - {{ project[2] }}</h2>
             <form method="post">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <div class="form-group">
                     <label for="progress">进度更新信息:</label>
                     <textarea id="progress" name="progress" required></textarea>

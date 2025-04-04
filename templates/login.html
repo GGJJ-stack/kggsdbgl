@@ -6,127 +6,156 @@
     <title>登录 - 控股公司督办管理系统</title>
     <style>
         :root {
-            --primary-color: #6C7A8B; /* 莫兰迪蓝 */
-            --secondary-color: #D6A779; /* 莫兰迪橙 */
-            --text-color: #4A5568;
-            --background-color: #F0F4F8; /* 浅灰蓝背景 */
-            --border-color: #CBD5E0;
+            --mist-blue: #6C7A8B;         /* 雾霾蓝主色调 */
+            --morandi-orange: #D6A779;    /* 莫兰迪橙点缀色 */
+            --light-gray: #F0F4F8;         /* 浅灰背景 */
+            --deep-gray: #4A5568;          /* 深灰文字 */
+            --transition: all 0.3s ease;
         }
 
         body {
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            background: var(--primary-color); /* 主背景色改为莫兰迪蓝 */
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, var(--mist-blue) 0%, #8A9AAD 100%);
             margin: 0;
-            padding: 2rem;
-            color: var(--text-color);
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
+            padding: 20px;
         }
 
         .login-container {
-            background: rgba(255, 255, 255, 0.98); /* 提高容器透明度 */
-            padding: 2.5rem;
-            border-radius: 16px; /* 增加圆角 */
-            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15); /* 加强阴影效果 */
+            background: rgba(255, 255, 255, 0.96);
             width: 100%;
-            max-width: 420px; /* 稍加大容器宽度 */
-            transform: translateY(-20px); /* 轻微上移 */
-            transition: transform 0.3s ease;
+            max-width: 420px;
+            padding: 2.5rem;
+            border-radius: 16px;
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+            backdrop-filter: blur(8px);
+            transform: translateY(-20px);
+            transition: var(--transition);
         }
 
         h1 {
-            color: var(--primary-color);
+            color: var(--mist-blue);
             text-align: center;
-            margin-bottom: 2rem;
-            font-size: 1.8rem; /* 加大标题字号 */
-            letter-spacing: 1px; /* 增加字间距 */
+            margin: 0 0 2rem 0;
+            font-size: 2rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            position: relative;
+            padding-bottom: 1rem;
+        }
+
+        h1::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 3px;
+            background: var(--morandi-orange);
         }
 
         .form-group {
-            margin-bottom: 1.8rem; /* 增加间距 */
+            margin-bottom: 1.8rem;
         }
 
         label {
             display: block;
             margin-bottom: 0.75rem;
-            color: var(--primary-color); /* 标签使用主色 */
-            font-weight: 600; /* 加粗字体 */
+            color: var(--deep-gray);
+            font-weight: 500;
+            font-size: 0.95rem;
         }
 
         input[type="text"],
         input[type="password"] {
             width: 100%;
-            padding: 0.9rem;
-            border: 2px solid var(--border-color); /* 加粗边框 */
-            border-radius: 8px; /* 加大输入框圆角 */
+            padding: 12px 16px;
+            border: 2px solid #E2E8F0;
+            border-radius: 8px;
             font-size: 1rem;
-            transition: all 0.3s ease;
-            background: #F8FAFC; /* 输入框浅背景 */
+            color: var(--deep-gray);
+            transition: var(--transition);
+            background: #F8FAFC;
         }
 
         input[type="text"]:focus,
         input[type="password"]:focus {
-            border-color: var(--secondary-color);
-            box-shadow: 0 0 0 3px rgba(214, 167, 121, 0.2); /* 调整聚焦阴影颜色 */
-        }
-
-        .error-message {
-            color: #E53E3E; /* 更醒目的错误提示色 */
-            margin: 1rem 0;
-            padding: 0.8rem;
-            background: #FED7D7;
-            border-radius: 6px;
-            text-align: center;
-            font-weight: 500;
+            border-color: var(--morandi-orange);
+            box-shadow: 0 0 0 3px rgba(214, 167, 121, 0.2);
+            outline: none;
         }
 
         button {
             width: 100%;
-            padding: 1rem;
-            background: var(--secondary-color);
+            padding: 14px;
+            background: var(--morandi-orange);
             color: white;
             border: none;
-            border-radius: 8px; /* 匹配输入框圆角 */
-            font-size: 1.1rem; /* 加大按钮字号 */
+            border-radius: 8px;
+            font-size: 1.05rem;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
-            text-transform: uppercase; /* 按钮文字大写 */
+            transition: var(--transition);
             letter-spacing: 1px;
+            margin-top: 1rem;
         }
 
         button:hover {
-            background: #C89364; /* 更深的橙色 */
-            transform: translateY(-2px); /* 悬停微动效 */
+            background: #C89364;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(214, 167, 121, 0.3);
+        }
+
+        .error-message {
+            color: #C53030;
+            background: #FFF5F5;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            border: 1px solid #FED7D7;
+            font-size: 0.95rem;
         }
 
         .datetime-info {
             text-align: center;
             margin-top: 2rem;
-            color: var(--primary-color); /* 使用主色 */
+            color: var(--mist-blue);
             font-size: 0.9rem;
-            font-weight: 500;
             padding-top: 1.5rem;
-            border-top: 1px solid var(--border-color); /* 增加上边框 */
+            border-top: 1px solid #E2E8F0;
+            font-weight: 500;
+        }
+
+        @media (max-width: 480px) {
+            .login-container {
+                padding: 1.5rem;
+                margin: 0 15px;
+            }
+            
+            h1 {
+                font-size: 1.6rem;
+            }
         }
     </style>
 </head>
 <body>
     <div class="login-container">
-        <h1>用户登录</h1>
+        <h1>督办管理系统登录</h1>
         
         {% if error %}
             <div class="error-message">{{ error }}</div>
         {% endif %}
 
         <form method="POST" action="{{ url_for('login') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             
             <div class="form-group">
                 <label for="username">用户名</label>
-                <input type="text" id="username" name="username" required>
+                <input type="text" id="username" name="username" required autofocus>
             </div>
 
             <div class="form-group">
@@ -134,11 +163,11 @@
                 <input type="password" id="password" name="password" required>
             </div>
 
-            <button type="submit">登录</button>
+            <button type="submit">立即登录</button>
         </form>
 
         <div class="datetime-info">
-            当前时间：{{ current_datetime.strftime('%Y-%m-%d %H:%M:%S') }}
+            系统时间：{{ current_datetime.strftime('%Y-%m-%d %H:%M:%S') }}
         </div>
     </div>
 </body>

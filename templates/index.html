@@ -173,99 +173,85 @@
 </head>
 <body>
     <div class="container">
-        <!-- 新增全局CSRF令牌（用于AJAX请求） -->
-        <meta name="csrf-token" content="{{ csrf_token() }}">
+        <!-- 修正全局CSRF令牌 -->
+        <meta name="csrf-token" content="{{ csrf_token }}">
         
-        <div class="status-bar"></div>
-        <h1>控股公司督办管理系统</h1>
+        <!-- 修正导航栏隐藏表单 -->
+        <form id="nav-actions" style="display:none;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        </form>
         
-        <nav>
-            <!-- 新增导航栏表单保护 -->
-            <form id="nav-actions" style="display:none;">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            </form>
+        <!-- 修正用户管理表单 -->
+        <form class="admin-form" action="{{ url_for('user_management') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="nav-link admin-badge">用户管理</button>
+        </form>
+        
+        <!-- 修正个人资料表单 -->
+        <form class="profile-form" action="{{ url_for('profile') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="nav-link">个人资料</button>
+        </form>
 
-            <div class="main-nav">
-                <a class="nav-link" href="{{ url_for('unfinished_projects') }}">未完成项目</a>
-                <a class="nav-link" href="{{ url_for('finished_projects') }}">已完成项目</a>
-                <a class="nav-link" href="{{ url_for('all_projects') }}">全部项目</a>
-            </div>
-            
-            <div class="user-nav">
-                {% if session.get('is_admin') or is_admin %}
-                    <!-- 用户管理表单添加CSRF -->
-                    <form class="admin-form" action="{{ url_for('user_management') }}" method="POST">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="nav-link admin-badge">用户管理</button>
-                    </form>
-                {% endif %}
-                
-                <!-- 个人资料表单添加CSRF -->
-                <form class="profile-form" action="{{ url_for('profile') }}" method="POST">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="nav-link">个人资料</button>
-                </form>
-
-                <!-- 退出登录表单已正确包含CSRF -->
-            </div>
-
-            <style>
-                :root {
-                    --primary-color: #6C8EBF; /* 莫兰迪蓝主色 */
-                    --secondary-color: #D79B77; /* 莫兰迪橙跳色 */
-                    --text-color: #4A5568; /* 深灰蓝文本 */
-                    --nav-bg: rgba(255, 255, 255, 0.98); /* 纯白导航背景 */
-                    --border-color: #CBD5E0; /* 浅灰蓝边框 */
-                }
-
-                nav {
-                    background: var(--nav-bg);
-                    box-shadow: 0 4px 15px rgba(108, 142, 191, 0.15);
-                    border: 1px solid var(--border-color);
-                }
-
-                .nav-link {
-                    color: var(--primary-color);
-                    border: 2px solid var(--border-color);
-                    background: rgba(108, 142, 191, 0.05);
-                }
-
-                .nav-link:hover {
-                    background: var(--secondary-color);
-                    color: white;
-                    border-color: transparent;
-                }
-
-                .admin-badge {
-                    background: var(--primary-color);
-                    color: white;
-                }
-
-                .status-bar {
-                    background: linear-gradient(90deg, 
-                        var(--primary-color) 30%, 
-                        var(--secondary-color) 70%);
-                }
-
-                .content-container {
-                    background: var(--nav-bg);
-                    border: 1px solid var(--border-color);
-                    box-shadow: 0 6px 15px rgba(108, 142, 191, 0.1);
-                }
-
-                /* 保留原有交互效果 */
-                .nav-link::after {
-                    background: var(--secondary-color);
-                }
-            </style>
-        </nav>
-
-        <!-- 优化内容容器 -->
-        <div class="content-container">
-            <h2>欢迎使用</h2>
-            <p>当前系统状态：运行正常</p>
-            <!-- 后续内容可在此添加 -->
-        </div>
+        <!-- 退出登录表单已正确包含CSRF -->
     </div>
-</body>
+
+    <style>
+        :root {
+            --primary-color: #6C8EBF; /* 莫兰迪蓝主色 */
+            --secondary-color: #D79B77; /* 莫兰迪橙跳色 */
+            --text-color: #4A5568; /* 深灰蓝文本 */
+            --nav-bg: rgba(255, 255, 255, 0.98); /* 纯白导航背景 */
+            --border-color: #CBD5E0; /* 浅灰蓝边框 */
+        }
+
+        nav {
+            background: var(--nav-bg);
+            box-shadow: 0 4px 15px rgba(108, 142, 191, 0.15);
+            border: 1px solid var(--border-color);
+        }
+
+        .nav-link {
+            color: var(--primary-color);
+            border: 2px solid var(--border-color);
+            background: rgba(108, 142, 191, 0.05);
+        }
+
+        .nav-link:hover {
+            background: var(--secondary-color);
+            color: white;
+            border-color: transparent;
+        }
+
+        .admin-badge {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .status-bar {
+            background: linear-gradient(90deg, 
+                var(--primary-color) 30%, 
+                var(--secondary-color) 70%);
+        }
+
+        .content-container {
+            background: var(--nav-bg);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 6px 15px rgba(108, 142, 191, 0.1);
+        }
+
+        /* 保留原有交互效果 */
+        .nav-link::after {
+            background: var(--secondary-color);
+        }
+    </style>
+</nav>
+
+<!-- 优化内容容器 -->
+<div class="content-container">
+    <h2>欢迎使用</h2>
+    <p>当前系统状态：运行正常</p>
+    <!-- 后续内容可在此添加 -->
+</div>
+</div>
 </html>

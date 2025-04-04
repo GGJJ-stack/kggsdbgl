@@ -124,10 +124,9 @@
             </div>
             {% endif %}
 
-            <!-- 总结提交表单 -->
-            {% if can_edit_summary %}
+            <!-- 修正总结提交表单 -->
             <form method="post">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <div class="info-item">
                     <label>{{ '重新提交项目总结' if project.summary_status == 'rejected' else '填写项目总结' }}</label>
                     <textarea name="final_summary" 
@@ -142,12 +141,10 @@
                     </button>
                 </div>
             </form>
-            {% endif %}
 
-            <!-- 管理员审核区域 -->
-            {% if can_review %}
+            <!-- 修正管理员审核表单 -->
             <form method="post">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <div class="info-item">
                     <label>🔍 总结审核</label>
                     <select name="review_result" class="form-select" required>

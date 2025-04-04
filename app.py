@@ -16,16 +16,13 @@ app = Flask(__name__)
 secret_key = os.urandom(24).hex()
 csrf = CSRFProtect(app)
 
-# 获取项目根目录（确保路径正确）
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 class Config:
-    # 使用绝对路径确保路径一致性
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'instance', 'project_files')
     DATABASE_PATH = os.path.join(BASE_DIR, 'instance', 'supervision.db')
-    SECRET_KEY = os.environ.get('SECRET_KEY') or secrets.token_urlsafe(32)
+    SECRET_KEY = os.environ.get('SECRET_KEY') or secret_key
     
-    # 确保目录存在
     @classmethod
     def init(cls):
         os.makedirs(cls.UPLOAD_FOLDER, exist_ok=True)
@@ -50,16 +47,12 @@ def get_db():
     if not hasattr(g, '_database'):
         try:
             g._database = sqlite3.connect(app.config['DATABASE'])
-            print(f"成功连接数据库: {app.config['DATABASE']}")
             g._database.row_factory = sqlite3.Row
             init_sqlite_schema(g._database)
         except sqlite3.Error as e:
             print(f"数据库连接失败: {str(e)}")
             raise
     return g._database
-
-import sqlite3
-from werkzeug.security import generate_password_hash
 
 def init_sqlite_schema(conn):
     try:
@@ -159,7 +152,6 @@ def init_sqlite_schema(conn):
         print(f'系统错误: {str(e)}')
         conn.rollback()
         raise
-    
 
 def format_datetime(value, format='%Y-%m-%d'):
     if isinstance(value, str):
@@ -183,10 +175,6 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-@app.context_processor
-def inject_csrf_token():
-    return dict(csrf_token=generate_csrf)
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     current_datetime = datetime.datetime.now()
@@ -195,6 +183,11 @@ def login():
             username = request.form.get('username', '').strip()
             password = request.form.get('password', '').strip()
             next_url = request.form.get('next', '')
+            
+            if next_url:
+                parsed_url = urlparse(next_url)
+                if parsed_url.netloc != '':
+                    next_url = url_for('index')
             
             if not username or not password:
                 return render_template('login.html', error='用户名和密码不能为空', current_datetime=current_datetime)
@@ -208,6 +201,7 @@ def login():
                     session.clear()
                     session['user_id'] = user['id']
                     session['is_admin'] = user['is_admin']
+                    session.permanent = True
                     return redirect(next_url or url_for('index'))
                 
             return render_template('login.html', error='用户名或密码错误', current_datetime=current_datetime)
@@ -219,7 +213,11 @@ def login():
             app.logger.error(f"登录异常: {str(e)}")
             return render_template('login.html', error='登录处理异常，请稍后重试', current_datetime=current_datetime)
     
-    return render_template('login.html', current_datetime=current_datetime)
+    next_url = request.args.get('next', '')
+    return render_template('login.html', 
+                         current_datetime=current_datetime, 
+                         next=next_url,
+                         csrf_token=generate_csrf())
 
 @app.errorhandler(CSRFError)
 def handle_csrf_error(e):
@@ -238,9 +236,10 @@ def user_management():
     current_datetime = datetime.datetime.now()
     error = None
     with get_db() as conn:
+        users = []
         if request.method == 'POST':
-            if 'download_users' in request.form:
-                try:
+            try:
+                if 'download_users' in request.form:
                     validate_csrf(request.form.get('csrf_token'))
                     filename = request.form.get('filename', 'users').strip() or 'users'
                     filename += '.xlsx'
@@ -257,14 +256,11 @@ def user_management():
                         download_name=filename,
                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                     )
-                except Exception as e:
-                    flash(f'生成用户数据失败: {str(e)}', 'error')
 
-            if 'upload_users' in request.form:
-                try:
+                elif 'upload_users' in request.form:
                     validate_csrf(request.form.get('csrf_token'))
-                    file = request.files['file']
-                    if file.filename == '':
+                    file = request.files.get('file')
+                    if not file or file.filename == '':
                         flash('没有选择文件', 'error')
                         return redirect(request.url)
                         
@@ -290,24 +286,24 @@ def user_management():
                         flash('部分用户名已存在，未插入重复数据', 'error')
                     return redirect(request.url)
 
-                except CSRFError:
-                    flash('操作令牌无效，请刷新页面后重试', 'error')
-                except Exception as e:
-                    flash(f'上传失败: {str(e)}', 'error')
-
-            try:
-                if 'add_user' in request.form:
+                elif 'add_user' in request.form:
                     username = request.form.get('username', '').strip()
                     password = request.form.get('password', '123456').strip()
                     phone = request.form.get('phone', '').strip()
                     is_admin = 1 if request.form.get('is_admin') == '1' else 0
 
-                    hashed_pw = generate_password_hash(password)
-                    conn.execute(
-                        "INSERT INTO users (username, password, phone, is_admin) VALUES (?, ?, ?, ?)",
-                        (username, hashed_pw, phone, is_admin)
-                    )
-                    conn.commit()
+                    if not username or not password:
+                        error = "用户名和密码不能为空"
+                    else:
+                        hashed_pw = generate_password_hash(password)
+                        try:
+                            conn.execute(
+                                "INSERT INTO users (username, password, phone, is_admin) VALUES (?, ?, ?, ?)",
+                                (username, hashed_pw, phone, is_admin)
+                            )
+                            conn.commit()
+                        except sqlite3.IntegrityError:
+                            error = "用户名已存在"
 
                 elif 'delete_user' in request.form:
                     user_id = request.form.get('user_id')
@@ -336,10 +332,9 @@ def user_management():
                     conn.execute(query, params)
                     conn.commit()
 
-            except sqlite3.IntegrityError as e:
-                error = "用户名已存在"
             except Exception as e:
                 error = str(e)
+                flash(f'操作失败: {str(e)}', 'error')
             
         users = conn.execute("SELECT id, username, phone, is_admin FROM users").fetchall()
 
@@ -563,7 +558,7 @@ def add_project():
             except Exception as e:
                 error = str(e)
 
-    return render_template('add_project.html', users=users, error=error)
+    return render_template('add_project.html', users=users, error=error, csrf_token=generate_csrf())
 
 @app.route('/unfinished_projects', methods=['GET', 'POST'])
 def unfinished_projects():
@@ -604,7 +599,7 @@ def unfinished_projects():
                 if 'upload' in request.form:
                     file = request.files['project_file']
                     if file and file.filename.endswith('.xlsx'):
-                        filepath = os.path.join(AliCloudConfig.UPLOAD_FOLDER, file.filename)
+                        filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
                         file.save(filepath)
                         flash(f'文件 {file.filename} 上传成功')
                 
@@ -765,8 +760,9 @@ def unfinished_projects():
                          projects=projects,
                          error=error,
                          is_admin=is_admin,
-                         current_date=current_datetime.strftime('%Y-%m-%d'),csrf_token=generate_csrf())
-
+                         current_date=current_datetime.strftime('%Y-%m-%d'),
+                         csrf_token=generate_csrf())
+                         
 @app.route('/project_detail/<int:project_id>', methods=['GET', 'POST'])
 def project_detail(project_id):
     current_datetime = datetime.datetime.now()
@@ -949,7 +945,8 @@ def project_detail(project_id):
                                'pending': ('待审核', 'warning'),
                                'approved': ('已通过', 'success'),
                                'rejected': ('已驳回', 'danger')
-                           })
+                           },
+                           csrf_token=generate_csrf())
 
 @app.route('/edit_project/<int:project_id>', methods=['GET', 'POST'])
 def edit_project(project_id):
@@ -1193,7 +1190,8 @@ def finished_projects():
     return render_template('finished_projects.html',
                         all_entries_sorted=all_entries_sorted,
                         is_admin=is_admin,
-                        current_datetime=current_datetime)
+                        current_datetime=current_datetime,
+                        csrf_token=generate_csrf())
 
 @app.route('/finished_project_detail/<int:project_id>', methods=['GET', 'POST'])
 def finished_project_detail(project_id):
@@ -1335,7 +1333,8 @@ def finished_project_detail(project_id):
             'approved': ('已通过', 'success'),
             'rejected': ('已驳回', 'danger')
         },
-        overdue_warning=project_data['is_overdue']
+        overdue_warning=project_data['is_overdue'],
+        csrf_token=generate_csrf()
     )
 
 @app.route('/edit_finished_project/<int:project_id>', methods=['GET', 'POST'])
@@ -1355,6 +1354,7 @@ def edit_finished_project(project_id):
 
         if request.method == 'POST':
             try:
+                validate_csrf(request.form.get('csrf_token'))
                 update_data = [
                     request.form['category'],
                     request.form['project_name'],
@@ -1394,7 +1394,8 @@ def edit_finished_project(project_id):
     return render_template('edit_finished_project.html',
                            project=project,
                            users=users,
-                           current_datetime=datetime.datetime.now())
+                           current_datetime=datetime.datetime.now(),
+                           csrf_token=generate_csrf())
 
 @app.route('/finished_projects/add', methods=['GET', 'POST'])
 @admin_required
@@ -1460,7 +1461,8 @@ def add_finished_project():
     return render_template('add_finished_project.html',
                          users=users,
                          error=error,
-                         current_datetime=current_datetime)
+                         current_datetime=current_datetime,
+                         csrf_token=generate_csrf())
 
 @app.route('/all_projects', methods=['GET', 'POST'])
 def all_projects():
@@ -1581,7 +1583,8 @@ def all_projects():
             'per_page': per_page,
             'total': total,
             'pages': (total // per_page) + (1 if total % per_page else 0)
-        }
+        },
+        csrf_token=generate_csrf()
     )
 
 @app.route('/delete_project/<int:project_id>', methods=['POST'])

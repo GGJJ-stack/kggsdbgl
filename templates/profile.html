@@ -9,9 +9,10 @@
     <div class="profile-container">  <!-- 新增容器 -->
         <h2 class="profile-title">个人信息修改</h2>
         <form method="post" class="profile-form">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <!-- 修正 CSRF 令牌的语法 -->
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             
-            <div class="form-group">  <!-- 表单分组 -->
+            <div class="form-group">
                 <label for="password">新密码:</label>
                 <input type="password" id="password" name="password" value="{{ user[2] }}" class="form-input">
             </div>

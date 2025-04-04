@@ -82,7 +82,8 @@
             min-height: 100px;
         }
     </style>
-    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <!-- 修正全局CSRF令牌 -->
+    <meta name="csrf-token" content="{{ csrf_token }}">
 </head>
 
 <body>
@@ -93,7 +94,8 @@
             <p style="color: red; margin-bottom: 20px;">{{ error }}</p>
             {% endif %}
             <form method="post">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <!-- 修正表单CSRF令牌 -->
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 
                 <div class="form-group">
                     <label for="category">项目类别:</label>
