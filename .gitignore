@@ -1,0 +1,22 @@
+# 示例 .gitignore
+# Python
+__pycache__/
+*.py[cod]
+*.sqlite
+*.db
+*.xlsx
+
+# IDE
+.idea/
+.vscode/
+
+# 环境文件
+.env
+venv/
+
+# 日志和临时文件
+*.log
+*.tmp
+
+# 系统文件
+.DS_Store
