@@ -11,10 +11,19 @@ import datetime
 import io
 import sys
 import pandas as pd
+from werkzeug.middleware.proxy_fix import ProxyFix  # 新增ProxyFix
 
 app = Flask(__name__)
-secret_key = os.urandom(24).hex()
 csrf = CSRFProtect(app)
+
+# 新增ProxyFix中间件配置（根据实际代理数量调整）
+app.wsgi_app = ProxyFix(
+    app.wsgi_app,
+    x_for=1,
+    x_proto=1,
+    x_host=1,
+    x_prefix=1
+)
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
@@ -23,7 +32,7 @@ WEBHOOK_SECRET = b'c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c
 class Config:
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'instance', 'project_files')
     DATABASE_PATH = os.path.join(BASE_DIR, 'instance', 'supervision.db')
-    SECRET_KEY = os.environ.get('SECRET_KEY') or secret_key
+    SECRET_KEY = os.environ.get('SECRET_KEY') or os.urandom(24).hex()
     
     @classmethod
     def init(cls):
@@ -39,10 +48,14 @@ app.config.update(
     DATABASE=Config.DATABASE_PATH,
     UPLOAD_FOLDER=Config.UPLOAD_FOLDER,
     WTF_CSRF_TIME_LIMIT=7200,
-    SESSION_COOKIE_SECURE=False,
+    # 修复关键配置开始
+    SESSION_COOKIE_SECURE=True,        # 强制HTTPS传输cookie
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
-    PREFERRED_URL_SCHEME='http'
+    PREFERRED_URL_SCHEME='https',      # 确保生成HTTPS链接
+    WTF_CSRF_SSL_STRICT=False,         # 允许跨协议保护
+    # 修复关键配置结束
+    MAX_CONTENT_LENGTH=100 * 1024 * 1024  # 100MB
 )
 
 def get_db():
@@ -219,17 +232,25 @@ def login():
             password = request.form.get('password', '').strip()
             next_url = request.form.get('next', '')
             
+            # 强化next参数校验
             if next_url:
-                parsed_url = urlparse(next_url)
-                if parsed_url.netloc != '':
+                parsed = urlparse(next_url)
+                if parsed.netloc != '' or not parsed.path.startswith('/'):
                     next_url = url_for('index')
-            
+                elif '//' in parsed.path:  # 防止路径遍历
+                    next_url = url_for('index')
+
             if not username or not password:
-                return render_template('login.html', error='用户名和密码不能为空', current_datetime=current_datetime)
+                return render_template('login.html', 
+                    error='用户名和密码不能为空',
+                    current_datetime=current_datetime), 400
 
             with get_db() as conn:
                 c = conn.cursor()
-                c.execute("SELECT id, password, is_admin FROM users WHERE username = ?", (username,))
+                c.execute(
+                    "SELECT id, password, is_admin FROM users WHERE username = ?",
+                    (username,)
+                )
                 user = c.fetchone()
                 
                 if user and check_password_hash(user['password'], password):
@@ -237,21 +258,42 @@ def login():
                     session['user_id'] = user['id']
                     session['is_admin'] = user['is_admin']
                     session.permanent = True
-                    return redirect(next_url or url_for('index'))
+                    session.modified = True  
+                    
+                    response = redirect(next_url or url_for('index'))
+                    csrf.protect(response)  
+                    return response
                 
-            return render_template('login.html', error='用户名或密码错误', current_datetime=current_datetime)
+            return render_template('login.html', 
+                error='用户名或密码错误',
+                current_datetime=current_datetime), 401
         
         except sqlite3.Error as e:
             app.logger.error(f"数据库查询错误: {str(e)}")
-            return render_template('login.html', error='数据库连接失败，请联系管理员', current_datetime=current_datetime)
+            return render_template('login.html', 
+                error='数据库连接失败，请联系管理员',
+                current_datetime=current_datetime), 500
         except Exception as e:
             app.logger.error(f"登录异常: {str(e)}")
-            return render_template('login.html', error='登录处理异常，请稍后重试', current_datetime=current_datetime)
+            return render_template('login.html', 
+                error='登录处理异常，请稍后重试',
+                current_datetime=current_datetime), 500
     
     next_url = request.args.get('next', '')
-    return render_template('login.html', 
-                         current_datetime=current_datetime, 
-                         next=next_url)
+    if next_url:
+        parsed = urlparse(next_url)
+        if parsed.netloc != '' or not parsed.path.startswith('/'):
+            next_url = ''
+        elif '//' in parsed.path:
+            next_url = ''
+
+    response = make_response(render_template(
+        'login.html', 
+        current_datetime=current_datetime, 
+        next=next_url
+    ))
+    csrf.protect(response)  
+    return response
 
 @app.errorhandler(CSRFError)
 def handle_csrf_error(e):
