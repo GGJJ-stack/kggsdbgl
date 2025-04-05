@@ -1,6 +1,6 @@
 import os
 from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, session, abort, flash, send_file, g
+from flask import Flask, render_template, request, redirect, url_for, session, abort, flash, send_file, g, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_wtf.csrf import CSRFProtect, validate_csrf, CSRFError
 from urllib.parse import urlparse, urlunparse, unquote
@@ -17,6 +17,8 @@ secret_key = os.urandom(24).hex()
 csrf = CSRFProtect(app)
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
+WEBHOOK_SECRET = b'c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4'
 
 class Config:
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'instance', 'project_files')
@@ -174,6 +176,39 @@ def admin_required(f):
             abort(403)
         return f(*args, **kwargs)
     return decorated_function
+
+@app.route('/webhook', methods=['POST'])
+@csrf.exempt  # 禁用CSRF保护
+def webhook_handler():
+    """
+    处理Webhook请求的端点
+    """
+    try:
+        # 获取请求数据
+        data = request.get_json()
+        
+        # 验证请求是否包含必要数据
+        if not data:
+            app.logger.error("Webhook received empty payload")
+            return jsonify({"status": "error", "message": "Empty payload"}), 400
+            
+        # 在这里添加您的业务逻辑处理
+        app.logger.info(f"Received webhook data: {data}")
+        
+        # 示例处理：检查事件类型
+        event_type = data.get('event')
+        if event_type == 'project_updated':
+            # 处理项目更新逻辑
+            pass
+        elif event_type == 'user_created':
+            # 处理用户创建逻辑
+            pass
+            
+        return jsonify({"status": "success"}), 200
+        
+    except Exception as e:
+        app.logger.error(f"Webhook processing failed: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
