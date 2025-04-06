@@ -31,8 +31,8 @@ WEBHOOK_SECRET = b'c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c
 class Config:
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'instance', 'project_files')
     DATABASE_PATH = os.path.join(BASE_DIR, 'instance', 'supervision.db')
-    SECRET_KEY = os.environ.get('SECRET_KEY') or os.urandom(24).hex()
-    
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'your-secret-key-here'  # 使用固定密钥或确保环境变量设置
+
     @classmethod
     def init(cls):
         os.makedirs(cls.UPLOAD_FOLDER, exist_ok=True)
@@ -273,7 +273,6 @@ def login():
         elif '//' in parsed.path:
             next_url = ''
 
-    # 修复重点：移除csrf.protect调用
     return render_template(
         'login.html', 
         current_datetime=current_datetime, 
@@ -301,7 +300,6 @@ def user_management():
         if request.method == 'POST':
             try:
                 if 'download_users' in request.form:
-                    validate_csrf(request.form.get('csrf_token'))
                     filename = request.form.get('filename', 'users').strip() or 'users'
                     filename += '.xlsx'
                     
@@ -319,7 +317,6 @@ def user_management():
                     )
 
                 elif 'upload_users' in request.form:
-                    validate_csrf(request.form.get('csrf_token'))
                     file = request.files.get('file')
                     if not file or file.filename == '':
                         flash('没有选择文件', 'error')
@@ -635,7 +632,6 @@ def unfinished_projects():
             if request.method == 'POST':
                 if 'download_projects' in request.form:
                     try:
-                        validate_csrf(request.form.get('csrf_token'))
                         df = pd.read_sql_query("SELECT * FROM unfinished_projects", conn)
                         
                         buffer = io.BytesIO()
@@ -665,14 +661,11 @@ def unfinished_projects():
                 
                 if is_admin:
                     if 'delete_project' in request.form:
-                        validate_csrf(request.form.get('csrf_token'))
                         project_id = request.form.get('project_id')
                         if project_id:
                             conn.execute("DELETE FROM unfinished_projects WHERE id=?", (project_id,))
                             conn.commit()
                     elif 'update_project' in request.form:
-                        if not validate_csrf(request.form.get('csrf_token')):
-                            abort(403)
                         project_id = request.form.get('project_id')
                         fields = [
                             'category', 'project_name', 'main_work', 'work_goal',
@@ -731,7 +724,6 @@ def unfinished_projects():
                                 conn.commit()
                     elif 'upload_projects' in request.form:
                         try:
-                            validate_csrf(request.form.get('csrf_token'))
                             if 'file' not in request.files:
                                 flash('请选择文件', 'error')
                                 return redirect(request.url)
@@ -868,8 +860,6 @@ def project_detail(project_id):
                 completion_statuses.append(status_text)
 
             if request.method == 'POST':
-                validate_csrf(request.form.get('csrf_token'))
-                
                 if 'submit_progress' in request.form and is_responsible and not is_finished:
                     progress = request.form.get('progress', '').strip()
                     if progress:
@@ -1033,8 +1023,6 @@ def edit_project(project_id):
 
         if request.method == 'POST':
             try:
-                validate_csrf(request.form.get('csrf_token'))
-                
                 update_data = [
                     request.form['category'],
                     request.form['project_name'],
@@ -1096,7 +1084,6 @@ def mark_project_finished(project_id):
 
     current_datetime = datetime.datetime.now()
     try:
-        validate_csrf(request.form.get('csrf_token'))
         with get_db() as conn:
             project = conn.execute(
                 "SELECT * FROM unfinished_projects WHERE id = ?",
@@ -1199,7 +1186,6 @@ def finished_projects():
                 ORDER BY fp.category, fp.project_name, fp.main_work
             ''').fetchall()
 
-            # 分组处理相同主工作
             work_groups = {}
             for idx, entry in enumerate(raw_projects):
                 work_key = (entry['category'], entry['project_name'], entry['main_work'])
@@ -1207,7 +1193,6 @@ def finished_projects():
 
             all_entries_sorted = [dict(entry) for entry in raw_projects]
             
-            # 添加 rowspan 属性
             for work_key, indices in work_groups.items():
                 first_entry = all_entries_sorted[indices[0]]
                 first_entry['main_work_rowspan'] = len(indices)
@@ -1221,10 +1206,8 @@ def finished_projects():
             flash(f'数据加载失败: {str(e)}', 'error')
             return redirect(url_for('index'))
 
-    # 保持原有导出功能
     if request.method == 'POST' and 'export' in request.form:
         try:
-            validate_csrf(request.form.get('csrf_token'))
             with get_db() as conn:
                 df = pd.read_sql_query('''
                     SELECT * FROM finished_projects 
@@ -1305,8 +1288,6 @@ def finished_project_detail(project_id):
             days_diff = (current_date - completion_date).days if completion_date else 0
 
             if request.method == 'POST':
-                validate_csrf(request.form.get('csrf_token'))
-
                 if 'submit_summary' in request.form and can_edit_summary:
                     summary = request.form.get('final_summary', '').strip()
                     if summary:
@@ -1410,7 +1391,6 @@ def edit_finished_project(project_id):
 
         if request.method == 'POST':
             try:
-                validate_csrf(request.form.get('csrf_token'))
                 update_data = [
                     request.form['category'],
                     request.form['project_name'],
@@ -1598,7 +1578,6 @@ def all_projects():
 
         if request.method == 'POST' and 'export' in request.form:
             try:
-                validate_csrf(request.form.get('csrf_token'))
                 df = pd.read_sql_query(full_query, conn, params=params)
                 
                 buffer = io.BytesIO()
