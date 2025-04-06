@@ -175,7 +175,7 @@
             </form>
     
             <!-- 下载按钮 -->
-            <form method="POST" action="{{ url_for('user_management') }}">
+            <form method="POST">
                 <button type="submit" name="download_users" class="btn-excel">
                     Excel导出用户
                 </button>
@@ -183,14 +183,14 @@
             </form>
 
             <!-- 添加用户按钮 -->
-            <form action="{{ url_for('add_user') }}" method="get">
+            <form action="{{ url_for('add_user') }}">
                 <button type="submit" class="btn-excel">
                     添加用户
                 </button>
             </form>
 
             <!-- 返回按钮 -->
-            <form action="{{ url_for('index') }}" method="get">
+            <form action="{{ url_for('index') }}">
                 <button type="submit" class="btn-excel">
                     返回主菜单
                 </button>
@@ -220,14 +220,18 @@
                     <td>{{ user[2] }}</td>
                     <td>{{ '是' if user[3] else '否' }}</td>
                     <td>
-                        <form action="{{ url_for('edit_user', user_id=user[0]) }}" method="get" style="display: inline; border-left: 3px solid #D79B77;">
+                        <!-- 编辑按钮 -->
+                        <form action="{{ url_for('edit_user', user_id=user[0]) }}" style="display: inline;">
                             <button type="submit" class="btn-action">编辑</button>
                         </form>
-                        <form action="{{ url_for('user_management') }}" method="post" style="display: inline;">
+                        
+                        <!-- 删除按钮 -->
+                        <form method="POST" style="display: inline;">
                             <input type="hidden" name="user_id" value="{{ user[0] }}">
-                            <input type="hidden" name="delete_user" value="1">
+                            <input type="hidden" name="delete_user">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" onclick="return confirm('确定要删除该用户吗？')" class="btn-action">删除</button>
+                            <button type="submit" onclick="return confirm('确定要删除该用户吗？')" 
+                                    class="btn-action">删除</button>
                         </form>
                     </td>
                 </tr>
@@ -236,4 +240,3 @@
     </table>
 </body>
 </html>
-

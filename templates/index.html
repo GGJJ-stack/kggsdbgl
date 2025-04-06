@@ -135,11 +135,8 @@
 </head>
 <body>
     <div class="container">
-        <meta name="csrf-token" content="{{ csrf_token }}">
-        
         <nav>
             <div class="main-nav">
-                <!-- 新增核心导航按钮 -->
                 <a href="{{ url_for('unfinished_projects') }}" class="nav-link">未完成项目</a>
                 <a href="{{ url_for('finished_projects') }}" class="nav-link">已完成项目</a>
                 <a href="{{ url_for('all_projects') }}" class="nav-link">全部项目</a>
@@ -148,18 +145,18 @@
             <div class="user-nav">
                 {% if session.get('is_admin') %}
                 <form class="admin-form" action="{{ url_for('user_management') }}" method="POST">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="nav-link admin-badge">用户管理</button>
                 </form>
                 {% endif %}
                 
                 <form class="profile-form" action="{{ url_for('profile') }}" method="POST">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="nav-link">个人资料</button>
                 </form>
 
                 <form action="{{ url_for('logout') }}" method="POST">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="nav-link">退出登录</button>
                 </form>
             </div>

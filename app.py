@@ -525,11 +525,10 @@ def download_projects():
         flash(f'导出失败: {str(e)}', 'error')
         return redirect(url_for('finished_projects'))
 
-@app.route('/logout', methods=['GET', 'POST'])
+@app.route('/logout', methods=['POST'])
 def logout():
-    current_datetime = datetime.datetime.now()
     session.clear()
-    return redirect(url_for('login', current_datetime=current_datetime))
+    return redirect(url_for('login'))
 
 @app.route('/profile', methods=['GET', 'POST'])
 def profile():
