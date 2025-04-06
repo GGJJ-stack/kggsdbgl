@@ -158,7 +158,8 @@
         <div style="margin-bottom:15px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
             <a href="{{ url_for('index') }}" class="btn-main">返回主菜单</a>
             <form method="post" action="{{ url_for('all_projects') }}" style="margin:0;" onsubmit="return handleExport(event)">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <!-- 修正CSRF令牌字段 -->
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="export" value="true">
                 <button type="submit" class="btn-main">一键导出Excel</button>
             </form>

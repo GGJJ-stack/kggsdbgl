@@ -22,8 +22,8 @@
     <div class="container">
         <h2>编辑用户</h2>
         <form method="post">
-            <!-- 修正 CSRF 令牌语法 -->
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <!-- 修复后的CSRF令牌 -->
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             
             <div class="form-group">
                 <label>用户名：<input type="text" value="{{ user[1] }}" disabled></label>

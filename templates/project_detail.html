@@ -168,7 +168,7 @@
                 <strong>进度{{ loop.index }}:</strong> {{ status }}
                 {% if is_admin and status != '无' %}
                     <form method="post" style="display: inline;">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="progress_index" value="{{ loop.index }}">
                         <button type="submit" name="approve_progress">通过审核</button>
                         <button type="submit" name="reject_progress">驳回</button>
@@ -178,12 +178,11 @@
         {% endfor %}
     </div>
 
-    {# 修复权限判断逻辑 #}
     {% if not is_admin and session.user_id == project.responsible_person_id and status != '已完成' %}
         <div class="progress-form">
             <h3>提交新进度</h3>
             <form method="post">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <textarea name="progress" rows="4" required placeholder="请输入详细的进度描述..."></textarea><br>
                 <input type="date" name="date" value="{{ current_date }}">
                 <button type="submit" name="submit_progress">提交进度</button>
@@ -193,7 +192,7 @@
             <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
                 <h4>历史进度补录</h4>
                 <form method="post">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="date" name="history_date" required>
                     <textarea name="history_progress" rows="2" placeholder="补录历史进度描述..."></textarea>
                     <button type="submit" name="submit_history">提交历史进度</button>

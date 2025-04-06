@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>项目查询结果</title>
     <style>
         body { background: #F5F7FA; margin: 40px auto; font-family: 'Segoe UI', sans-serif; }
@@ -10,7 +11,20 @@
         table { border: 2px solid #6C8EBF; background: white; box-shadow: 0 2px 8px rgba(108, 142, 191, 0.1); }
         th, td { border: 1px solid #B8C7D9; padding: 8px; text-align: center; }
         th { background: #E1E8F0; }
-        .btn-main { background: #6C8EBF; color: white; padding: 6px 12px; border-radius: 4px; }
+        .btn-main { 
+            background: #6C8EBF; 
+            color: white; 
+            padding: 6px 12px;
+            border-radius: 4px;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s;
+            border: 1px solid #5B7CAD;
+        }
+        .btn-main:hover {
+            background: #5B7CAD;
+            box-shadow: 0 2px 6px rgba(108, 142, 191, 0.3);
+        }
     </style>
 </head>
 <body>

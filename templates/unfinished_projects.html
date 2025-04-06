@@ -45,7 +45,6 @@
             font-weight: bold;
         }
 
-        /* 列宽调整 */
         th:nth-child(1) { width: 5%; }
         th:nth-child(2) { width: 7.6%; }
         th:nth-child(3) { width: 11%; }
@@ -60,7 +59,6 @@
         th:nth-child(12) { width: 6%; }
         th:nth-child(13) { width: 6%; }
 
-        /* 按钮样式 */
         .btn-excel, .btn-action {
             background-color: #6C8EBF;
             border-color: #5B7CAD;
@@ -90,32 +88,30 @@
             display: inline-block;
             margin-right: 10px;
         }
+        .btn-main {
+            background-color: #6C8EBF !important;
+            border-color: #5B7CAD !important;
+            color: white !important;
+            padding: 8px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+            margin: 15px 0;
+        }
+        .btn-main:hover {
+            background-color: #5B7CAD !important;
+            box-shadow: 0 3px 8px rgba(108, 142, 191, 0.3);
+        }
+        .duplicate {
+            color: #888 !important;
+        }
+        .duplicate.overdue {
+            color: #ffb3b3 !important;
+        }
     </style>
 </head>
-<style>
-    .btn-main {
-        background-color: #6C8EBF !important;
-        border-color: #5B7CAD !important;
-        color: white !important;
-        padding: 8px 20px;
-        border-radius: 4px;
-        cursor: pointer;
-        transition: all 0.3s;
-        text-decoration: none;
-        display: inline-block;
-        margin: 15px 0;
-    }
-    .btn-main:hover {
-        background-color: #5B7CAD !important;
-        box-shadow: 0 3px 8px rgba(108, 142, 191, 0.3);
-    }
-    .duplicate {
-        color: #888 !important;
-    }
-    .duplicate.overdue {
-        color: #ffb3b3 !important;
-    }
-</style>
 
 <body>
     <h1>未完成项目列表 - {{ current_date }}</h1>
@@ -149,12 +145,14 @@
             </form>
             
             <form action="{{ url_for('add_project') }}" method="get">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn-excel">
                     添加项目
                 </button>
             </form>
             
             <form action="{{ url_for('index') }}" method="get">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn-excel">
                     返回主菜单
                 </button>
@@ -241,6 +239,7 @@
                     <td>
                         {% if is_admin %}
                             <form action="{{ url_for('edit_project', project_id=project[0]) }}" method="get">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn-action">
                                     编辑
                                 </button>
@@ -261,6 +260,7 @@
                             </form>
                         {% endif %}
                         <form action="{{ url_for('project_detail', project_id=project[0]) }}" method="get">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn-action">
                                 查看进度
                             </button>

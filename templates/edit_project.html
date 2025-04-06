@@ -82,8 +82,6 @@
             min-height: 100px;
         }
     </style>
-    <!-- 修正全局CSRF令牌 -->
-    <meta name="csrf-token" content="{{ csrf_token }}">
 </head>
 
 <body>
@@ -94,8 +92,8 @@
             <p style="color: red; margin-bottom: 20px;">{{ error }}</p>
             {% endif %}
             <form method="post">
-                <!-- 修正表单CSRF令牌 -->
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <!-- 修正后的CSRF令牌字段 -->
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 
                 <div class="form-group">
                     <label for="category">项目类别:</label>
@@ -138,13 +136,11 @@
 
                 <div class="form-group">
                     <label for="collaborator_id">配合人:</label>
-                    <!-- 修改name属性从collaborator_id变为collaborator -->
                     <input type="text" id="collaborator_id" name="collaborator" value="{{ project[8] }}">
                 </div>
 
                 <div class="form-group">
                     <label for="collaborating_department">配合部门:</label>
-                    <!-- 同步修改配合部门的name属性 -->
                     <input type="text" id="collaborating_department" name="collaborating_department" value="{{ project[9] }}">
                 </div>
 

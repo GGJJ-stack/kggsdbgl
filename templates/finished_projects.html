@@ -41,7 +41,6 @@
             border-bottom: 2px solid #D79B77;
             padding-bottom: 8px;
         }
-        /* 新增重复项目样式 */
         .duplicate-row td:not([rowspan]) {
             opacity: 0.6;
         }
@@ -58,7 +57,6 @@
         th:nth-child(11) { width: 8%; }
         th:nth-child(12) { width: 10%; }
         th:nth-child(13) { width: 4%; }
-
         .status-overdue {
             color: #D79B77 !important;
         }
@@ -94,7 +92,7 @@
             <button type="submit" class="btn">导出Excel</button>
         </form>
         <form action="{{ url_for('finished_projects') }}" method="post" enctype="multipart/form-data" style="margin:0">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">  <!-- 修复此处 -->
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="file" name="file" accept=".xlsx" style="display:none" id="fileInput">
             <label for="fileInput" class="btn" style="margin:0; cursor:pointer">导入Excel</label>
             <button type="submit" name="upload_projects" class="btn">上传</button>
@@ -175,7 +173,7 @@
                                    class="btn">详情</a>
                                 {% if is_admin %}
                                 <form method="POST" action="{{ url_for('finished_projects') }}">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">  <!-- 修复此处 -->
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="hidden" name="project_id" value="{{ entry.entry_data.id }}">
                                     <button type="submit" name="delete_project" class="btn btn-delete" 
                                             onclick="return confirm('确认删除该已完成项目？')">
