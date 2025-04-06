@@ -1,6 +1,6 @@
 import os
 from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, session, abort, flash, send_file, g, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, abort, flash, send_file, g, jsonify, make_response
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_wtf.csrf import CSRFProtect, validate_csrf, CSRFError
 from urllib.parse import urlparse, urlunparse, unquote
@@ -11,12 +11,11 @@ import datetime
 import io
 import sys
 import pandas as pd
-from werkzeug.middleware.proxy_fix import ProxyFix  # 新增ProxyFix
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
 csrf = CSRFProtect(app)
 
-# 新增ProxyFix中间件配置（根据实际代理数量调整）
 app.wsgi_app = ProxyFix(
     app.wsgi_app,
     x_for=1,
@@ -48,14 +47,12 @@ app.config.update(
     DATABASE=Config.DATABASE_PATH,
     UPLOAD_FOLDER=Config.UPLOAD_FOLDER,
     WTF_CSRF_TIME_LIMIT=7200,
-    # 修复关键配置开始
-    SESSION_COOKIE_SECURE=True,        # 强制HTTPS传输cookie
+    SESSION_COOKIE_SECURE=True,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
-    PREFERRED_URL_SCHEME='https',      # 确保生成HTTPS链接
-    WTF_CSRF_SSL_STRICT=False,         # 允许跨协议保护
-    # 修复关键配置结束
-    MAX_CONTENT_LENGTH=100 * 1024 * 1024  # 100MB
+    PREFERRED_URL_SCHEME='https',
+    WTF_CSRF_SSL_STRICT=False,
+    MAX_CONTENT_LENGTH=100 * 1024 * 1024
 )
 
 def get_db():
@@ -191,30 +188,21 @@ def admin_required(f):
     return decorated_function
 
 @app.route('/webhook', methods=['POST'])
-@csrf.exempt  # 禁用CSRF保护
+@csrf.exempt
 def webhook_handler():
-    """
-    处理Webhook请求的端点
-    """
     try:
-        # 获取请求数据
         data = request.get_json()
         
-        # 验证请求是否包含必要数据
         if not data:
             app.logger.error("Webhook received empty payload")
             return jsonify({"status": "error", "message": "Empty payload"}), 400
             
-        # 在这里添加您的业务逻辑处理
         app.logger.info(f"Received webhook data: {data}")
         
-        # 示例处理：检查事件类型
         event_type = data.get('event')
         if event_type == 'project_updated':
-            # 处理项目更新逻辑
             pass
         elif event_type == 'user_created':
-            # 处理用户创建逻辑
             pass
             
         return jsonify({"status": "success"}), 200
@@ -232,12 +220,11 @@ def login():
             password = request.form.get('password', '').strip()
             next_url = request.form.get('next', '')
             
-            # 强化next参数校验
             if next_url:
                 parsed = urlparse(next_url)
                 if parsed.netloc != '' or not parsed.path.startswith('/'):
                     next_url = url_for('index')
-                elif '//' in parsed.path:  # 防止路径遍历
+                elif '//' in parsed.path:
                     next_url = url_for('index')
 
             if not username or not password:
@@ -261,7 +248,6 @@ def login():
                     session.modified = True  
                     
                     response = redirect(next_url or url_for('index'))
-                    csrf.protect(response)  
                     return response
                 
             return render_template('login.html', 
@@ -287,13 +273,12 @@ def login():
         elif '//' in parsed.path:
             next_url = ''
 
-    response = make_response(render_template(
+    # 修复重点：移除csrf.protect调用
+    return render_template(
         'login.html', 
         current_datetime=current_datetime, 
         next=next_url
-    ))
-    csrf.protect(response)  
-    return response
+    )
 
 @app.errorhandler(CSRFError)
 def handle_csrf_error(e):
