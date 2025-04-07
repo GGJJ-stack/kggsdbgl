@@ -1170,9 +1170,10 @@ def finished_projects():
 
     with get_db() as conn:
         try:
+            # 修正SQL查询：为可能重复的列添加别名
             raw_projects = conn.execute('''
                 SELECT 
-                    fp.id,
+                    fp.id AS project_id,
                     fp.category,
                     fp.project_name,
                     fp.main_work,
@@ -1184,14 +1185,18 @@ def finished_projects():
                     fp.collaborating_department,
                     u3.username AS responsible_leader,
                     fp.completion_time_finished,
-                    (CASE WHEN fp.completion_time_finished > fp.completion_time 
-                        THEN '逾期' ELSE '正常' END) AS status
+                    CASE 
+                        WHEN fp.completion_time_finished > fp.completion_time 
+                            THEN '逾期' 
+                        ELSE '正常' 
+                    END AS status
                 FROM finished_projects fp
                 LEFT JOIN users u1 ON fp.responsible_person_id = u1.id
                 LEFT JOIN users u3 ON fp.responsible_leader_id = u3.id
                 ORDER BY fp.category, fp.project_name, fp.main_work
             ''').fetchall()
 
+            # 分组逻辑保持不变
             work_groups = {}
             for idx, entry in enumerate(raw_projects):
                 work_key = (entry['category'], entry['project_name'], entry['main_work'])
@@ -1199,6 +1204,7 @@ def finished_projects():
 
             all_entries_sorted = [dict(entry) for entry in raw_projects]
             
+            # 添加行跨度处理
             for work_key, indices in work_groups.items():
                 first_entry = all_entries_sorted[indices[0]]
                 first_entry['main_work_rowspan'] = len(indices)
@@ -1216,13 +1222,32 @@ def finished_projects():
         try:
             with get_db() as conn:
                 df = pd.read_sql_query('''
-                    SELECT * FROM finished_projects 
-                    LEFT JOIN users ON responsible_person_id = users.id
+                    SELECT 
+                        fp.id AS 项目ID,
+                        fp.category AS 类别,
+                        fp.project_name AS 项目名称,
+                        fp.main_work AS 主要工作,
+                        fp.work_goal AS 工作目标,
+                        fp.completion_time AS 计划完成时间,
+                        u1.username AS 责任人,
+                        fp.responsible_department AS 责任部门,
+                        fp.collaborator AS 配合人,
+                        fp.collaborating_department AS 配合部门,
+                        u3.username AS 责任领导,
+                        fp.completion_time_finished AS 实际完成时间,
+                        CASE 
+                            WHEN fp.completion_time_finished > fp.completion_time 
+                                THEN '逾期' 
+                            ELSE '正常' 
+                        END AS 状态
+                    FROM finished_projects fp
+                    LEFT JOIN users u1 ON fp.responsible_person_id = u1.id
+                    LEFT JOIN users u3 ON fp.responsible_leader_id = u3.id
                 ''', conn)
                 
                 buffer = io.BytesIO()
                 with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                    df.to_excel(writer, index=False)
+                    df.to_excel(writer, index=False, sheet_name='已完成项目')
                 buffer.seek(0)
                 
                 return send_file(
