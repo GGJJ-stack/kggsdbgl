@@ -341,6 +341,7 @@ def user_management():
                         conn.commit()
                         flash(f'成功上传 {len(df)} 条用户数据', 'success')
                     except sqlite3.IntegrityError:
+                        conn.rollback()
                         flash('部分用户名已存在，未插入重复数据', 'error')
                     return redirect(request.url)
 
@@ -664,6 +665,8 @@ def unfinished_projects():
                         if project_id:
                             conn.execute("DELETE FROM unfinished_projects WHERE id=?", (project_id,))
                             conn.commit()
+                            flash('项目删除成功', 'success')
+                            return redirect(url_for('unfinished_projects'))
                     elif 'update_project' in request.form:
                         project_id = request.form.get('project_id')
                         fields = [
@@ -721,6 +724,8 @@ def unfinished_projects():
                                 ))
                                 conn.execute("DELETE FROM unfinished_projects WHERE id=?", (project_id,))
                                 conn.commit()
+                                flash('项目已标记为完成', 'success')
+                                return redirect(url_for('unfinished_projects'))
                     elif 'upload_projects' in request.form:
                         try:
                             if 'file' not in request.files:
@@ -730,6 +735,10 @@ def unfinished_projects():
                             file = request.files['file']
                             if file.filename == '':
                                 flash('没有选择文件', 'error')
+                                return redirect(request.url)
+
+                            if not file.filename.lower().endswith(('.xlsx', '.xls')):
+                                flash('仅支持Excel文件（.xlsx/.xls）', 'error')
                                 return redirect(request.url)
 
                             df = pd.read_excel(file, engine='openpyxl')
@@ -1029,10 +1038,10 @@ def edit_project(project_id):
                     request.form['work_goal'],
                     request.form['completion_time'],
                     request.form['responsible_department'],
-                    request.form['responsible_person_id'],
+                    request.form.get('responsible_person_id'),
                     request.form.get('collaborator', ''),
                     request.form.get('collaborating_department', ''),
-                    request.form['responsible_leader_id'],
+                    request.form.get('responsible_leader_id'),
                     *[request.form.get(f'completion_status_{i}', '') for i in range(1, 11)],
                     project_id
                 ]
@@ -1093,7 +1102,7 @@ def mark_project_finished(project_id):
                 flash('项目不存在或已被处理', 'error')
                 return redirect(url_for('unfinished_projects'))
 
-            status_fields = [project[i] if project[i] else '' for i in range(12, 22)]
+            status_fields = [project[f'completion_status_{i}'] for i in range(1, 11)]
 
             conn.execute('''
                 INSERT INTO finished_projects (
@@ -1125,26 +1134,29 @@ def mark_project_finished(project_id):
                 )
             ''', (
                 project_id,
-                project[1],
-                project[2],
-                project[3],
-                project[4],
-                project[5],
-                project[6],
-                project[7],
-                project[8],
-                project[9],
-                project[10],
-                *status_fields,
+                project['category'],
+                project['project_name'],
+                project['main_work'],
+                project['work_goal'],
+                project['completion_time'],
+                project['responsible_person_id'],
+                project['responsible_department'],
+                project['collaborator'],
+                project['collaborating_department'],
+                project['responsible_leader_id'],
+                status_fields[0], status_fields[1], status_fields[2],
+                status_fields[3], status_fields[4], status_fields[5],
+                status_fields[6], status_fields[7], status_fields[8],
+                status_fields[9],
                 current_datetime.strftime('%Y-%m-%d')
             ))
 
             conn.execute("DELETE FROM unfinished_projects WHERE id = ?", (project_id,))
             conn.commit()
 
-            flash(f'项目 "{project[2]}" 已成功标记为完成', 'success')
-    except sqlite3.IntegrityError as e:
-        flash(f'数据库完整性错误: {str(e)}', 'error')
+            flash(f'项目 "{project["project_name"]}" 已成功标记为完成', 'success')
+    except sqlite3.Error as e:
+        flash(f'数据库错误: {str(e)}', 'error')
     except Exception as e:
         flash(f'标记完成失败: {str(e)}', 'error')
 
