@@ -1128,10 +1128,7 @@ def mark_project_finished(project_id):
                     completion_status_9,
                     completion_status_10,
                     completion_time_finished
-                ) VALUES (
-                    ?,?,?,?,?,?,?,?,?,?,?,
-                    ?,?,?,?,?,?,?,?,?,?,?
-                )
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ''', (
                 project_id,
                 project['category'],
@@ -1141,23 +1138,21 @@ def mark_project_finished(project_id):
                 project['completion_time'],
                 project['responsible_person_id'],
                 project['responsible_department'],
-                project['collaborator'],
-                project['collaborating_department'],
+                project.get('collaborator', ''),
+                project.get('collaborating_department', ''),
                 project['responsible_leader_id'],
-                status_fields[0], status_fields[1], status_fields[2],
-                status_fields[3], status_fields[4], status_fields[5],
-                status_fields[6], status_fields[7], status_fields[8],
-                status_fields[9],
+                *status_fields,
                 current_datetime.strftime('%Y-%m-%d')
             ))
 
             conn.execute("DELETE FROM unfinished_projects WHERE id = ?", (project_id,))
             conn.commit()
-
             flash(f'项目 "{project["project_name"]}" 已成功标记为完成', 'success')
     except sqlite3.Error as e:
+        app.logger.error(f"数据库错误: {str(e)}")
         flash(f'数据库错误: {str(e)}', 'error')
     except Exception as e:
+        app.logger.error(f"标记完成失败: {str(e)}")
         flash(f'标记完成失败: {str(e)}', 'error')
 
     return redirect(url_for('unfinished_projects'))
@@ -1634,14 +1629,13 @@ def all_projects():
 def delete_project(project_id):
     if request.method == 'POST':
         try:
-            conn = get_db()
-            conn.execute('DELETE FROM projects WHERE id = ?', (project_id,))
-            conn.commit()
-            conn.close()
-            flash('项目删除成功')
+            with get_db() as conn:
+                conn.execute('DELETE FROM unfinished_projects WHERE id = ?', (project_id,))
+                conn.commit()
+            flash('项目删除成功', 'success')
             return redirect(url_for('unfinished_projects'))
         except Exception as e:
-            flash(f'删除失败: {str(e)}')
+            flash(f'删除失败: {str(e)}', 'error')
             return redirect(url_for('unfinished_projects'))
 
 @app.errorhandler(401)
