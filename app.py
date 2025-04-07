@@ -1138,8 +1138,8 @@ def mark_project_finished(project_id):
                 project['completion_time'],
                 project['responsible_person_id'],
                 project['responsible_department'],
-                project.get('collaborator', ''),
-                project.get('collaborating_department', ''),
+                project['collaborator'] or '',  # 修复点：直接访问字段并用or处理None值
+                project['collaborating_department'] or '',  # 修复点：同上
                 project['responsible_leader_id'],
                 *status_fields,
                 current_datetime.strftime('%Y-%m-%d')
