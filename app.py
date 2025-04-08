@@ -1317,9 +1317,24 @@ def finished_project_detail(project_id):
         try:
             project = conn.execute('''
                 SELECT 
-                    fp.*,
+                    fp.id,
+                    fp.category,
+                    fp.project_name,
+                    fp.main_work,
+                    fp.work_goal,
+                    fp.completion_time AS original_completion_time,
+                    fp.responsible_person_id,
+                    fp.responsible_department,
+                    fp.collaborator,
+                    fp.collaborating_department,
+                    fp.responsible_leader_id,
+                    fp.completion_time_finished,
+                    fp.final_summary,
+                    fp.summary_status,
+                    fp.summary_submitted_at,
+                    fp.summary_reviewed_at,
+                    fp.review_comment,
                     u1.username AS responsible_person,
-                    u1.id AS responsible_person_id,
                     u3.username AS responsible_leader,
                     up.completion_status_1,
                     up.completion_status_2,
@@ -1345,15 +1360,18 @@ def finished_project_detail(project_id):
             can_edit_summary = is_responsible and project['summary_status'] in (None, 'rejected')
             can_review = is_admin and project['summary_status'] == 'pending'
 
-            # 修复状态字段获取方式：通过字段名而非数字索引
             completion_statuses = []
-            for i in range(1, 11):  # 获取1-10的状态字段
-                status = project.get(f'completion_status_{i}')
+            for i in range(1, 11):
+                status = project[f'completion_status_{i}']
                 completion_statuses.append(status if status is not None else "未记录")
 
-            completion_date = datetime.datetime.strptime(
-                project['completion_time_finished'], "%Y-%m-%d"
-            ).date() if project['completion_time_finished'] else None
+            try:
+                completion_date = datetime.datetime.strptime(
+                    project['completion_time_finished'], "%Y-%m-%d"
+                ).date() if project['completion_time_finished'] else None
+            except (ValueError, TypeError):
+                completion_date = None
+                
             current_date = current_datetime.date()
             days_diff = (current_date - completion_date).days if completion_date else 0
 
@@ -1404,7 +1422,7 @@ def finished_project_detail(project_id):
                 'project_name': project['project_name'],
                 'main_work': project['main_work'],
                 'work_goal': project['work_goal'],
-                'original_completion_time': format_datetime(project['completion_time']),
+                'original_completion_time': format_datetime(project['original_completion_time']),
                 'responsible_person': project['responsible_person'],
                 'responsible_department': project['responsible_department'],
                 'collaborator': project['collaborator'],
@@ -1424,8 +1442,8 @@ def finished_project_detail(project_id):
         except sqlite3.Error as e:
             flash(f'数据库错误: {str(e)}', 'error')
             return redirect(url_for('finished_projects'))
-        except ValueError as e:
-            flash(f'日期格式错误: {str(e)}', 'error')
+        except Exception as e:
+            flash(f'数据处理错误: {str(e)}', 'error')
             return redirect(url_for('finished_projects'))
 
     return render_template(
