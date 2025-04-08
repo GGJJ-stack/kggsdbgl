@@ -18,6 +18,8 @@
             text-align: center;
             vertical-align: middle;
             word-wrap: break-word;
+            white-space: normal;
+            word-break: break-word;  /* 修改为更合理的换行方式 */
         }
         th {
             background: #E1E8F0;
@@ -149,7 +151,9 @@
                         </td>
                         {% endif %}
 
-                        <td>{{ entry.work_goal|default('', true)|truncate(15) }}</td>
+                        <!-- 修复工作目标显示：移除truncate过滤器 -->
+                        <td>{{ entry.work_goal|default('', true) }}</td>
+                        <!-- 确保计划时间字段正确显示 -->
                         <td>{{ entry.plan_date|dateformat('%Y-%m-%d') }}</td>
                         <td>{{ entry.responsible_person|default('-', true) }}</td>
                         <td>{{ entry.responsible_department }}</td>
