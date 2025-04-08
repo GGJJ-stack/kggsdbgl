@@ -166,10 +166,9 @@
                                 <a href="{{ url_for('finished_project_detail', project_id=entry.project_id) }}"
                                    class="btn">详情</a>
                                 {% if is_admin %}
-                                <form method="POST" action="{{ url_for('finished_projects') }}">
+                                <form method="POST" action="{{ url_for('delete_finished_project', project_id=entry.project_id) }}">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <input type="hidden" name="project_id" value="{{ entry.project_id }}">
-                                    <button type="submit" name="delete_project" class="btn btn-delete" 
+                                    <button type="submit" class="btn btn-delete" 
                                             onclick="return confirm('确认删除该已完成项目？')">
                                         删除
                                     </button>
@@ -193,7 +192,7 @@
             });
         }, 5000);
 
-        document.querySelectorAll('button[name="delete_project"]').forEach(btn => {
+        document.querySelectorAll('button.btn-delete').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 if (!confirm('确定要永久删除这个项目吗？此操作不可恢复！')) {
                     e.preventDefault();
