@@ -1649,6 +1649,69 @@ def all_projects():
         }
     )
 
+@app.route('/delete_finished_project/<int:project_id>', methods=['POST'])
+@admin_required
+def delete_finished_project(project_id):
+    if request.method == 'POST':
+        try:
+            with get_db() as conn:
+                # 先检查项目是否存在
+                project = conn.execute(
+                    "SELECT id FROM finished_projects WHERE id = ?", 
+                    (project_id,)
+                ).fetchone()
+                
+                if not project:
+                    flash('项目不存在或已被删除', 'error')
+                    return redirect(url_for('finished_projects'))
+
+                # 执行删除操作
+                conn.execute(
+                    'DELETE FROM finished_projects WHERE id = ?', 
+                    (project_id,)
+                )
+                conn.commit()
+                flash('已完成项目删除成功', 'success')
+        except sqlite3.Error as e:
+            flash(f'数据库错误: {str(e)}', 'error')
+            app.logger.error(f"删除已完成项目失败: {str(e)}")
+        except Exception as e:
+            flash(f'删除失败: {str(e)}', 'error')
+            app.logger.error(f"删除异常: {str(e)}")
+    
+    return redirect(url_for('finished_projects'))
+
+@app.route('/delete_project/<int:project_id>', methods=['POST'])
+def delete_project(project_id):
+    if request.method == 'POST':
+        try:
+            with get_db() as conn:
+                # 检查项目是否存在
+                project = conn.execute(
+                    "SELECT id FROM unfinished_projects WHERE id = ?", 
+                    (project_id,)
+                ).fetchone()
+                
+                if not project:
+                    flash('项目不存在或已被删除', 'error')
+                    return redirect(url_for('unfinished_projects'))
+
+                # 删除未完成项目
+                conn.execute(
+                    'DELETE FROM unfinished_projects WHERE id = ?', 
+                    (project_id,)
+                )
+                conn.commit()
+                flash('未完成项目删除成功', 'success')
+        except sqlite3.Error as e:
+            flash(f'数据库错误: {str(e)}', 'error')
+            app.logger.error(f"删除未完成项目失败: {str(e)}")
+        except Exception as e:
+            flash(f'删除失败: {str(e)}', 'error')
+            app.logger.error(f"删除异常: {str(e)}")
+    
+    return redirect(url_for('unfinished_projects'))
+
 @app.route('/delete_project/<int:project_id>', methods=['POST'])
 def delete_project(project_id):
     if request.method == 'POST':
