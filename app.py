@@ -1264,146 +1264,111 @@ def finished_projects():
                         is_admin=is_admin,
                         current_datetime=current_datetime)
 
-@app.route('/finished_project_detail/<int:project_id>', methods=['GET', 'POST'])
-def finished_project_detail(project_id):
+@app.route('/finished_projects', methods=['GET', 'POST'])
+def finished_projects():
     current_datetime = datetime.datetime.now()
     if 'user_id' not in session:
-        abort(401)
+        flash('请先登录以访问该页面', 'warning')
+        return redirect(url_for('login', next=request.url))
 
     is_admin = session.get('is_admin', 0)
     error = None
-    with get_db() as conn:
-        try:
-            project = conn.execute('''
+    all_entries_sorted = []
+
+    try:
+        with get_db() as conn:
+            raw_projects = conn.execute('''
                 SELECT 
-                    fp.*,
+                    fp.id AS project_id,
+                    fp.category,
+                    fp.project_name,
+                    fp.main_work,
+                    fp.work_goal,
+                    fp.completion_time AS plan_date,
                     u1.username AS responsible_person,
-                    u1.id AS responsible_person_id,
+                    fp.responsible_department,
+                    fp.collaborator,
+                    fp.collaborating_department,
                     u3.username AS responsible_leader,
-                    up.completion_status_1,
-                    up.completion_status_2,
-                    up.completion_status_3,
-                    up.completion_status_4,
-                    up.completion_status_5,
-                    up.completion_status_6,
-                    up.completion_status_7,
-                    up.completion_status_8,
-                    up.completion_status_9,
-                    up.completion_status_10
+                    fp.completion_time_finished,
+                    CASE 
+                        WHEN fp.completion_time_finished > fp.completion_time 
+                            THEN '逾期' 
+                        ELSE '正常' 
+                    END AS status
                 FROM finished_projects fp
                 LEFT JOIN users u1 ON fp.responsible_person_id = u1.id
                 LEFT JOIN users u3 ON fp.responsible_leader_id = u3.id
-                LEFT JOIN unfinished_projects up ON fp.original_id = up.id
-                WHERE fp.id = ?
-            ''', (project_id,)).fetchone()
+                ORDER BY fp.category, fp.project_name, fp.main_work
+            ''').fetchall()
 
-            if not project:
-                abort(404)
+            work_groups = {}
+            processed_projects = []
+            for idx, entry in enumerate(raw_projects):
+                entry_dict = dict(entry)
+                work_key = (entry_dict['category'], entry_dict['project_name'], entry_dict['main_work'])
+                work_groups.setdefault(work_key, []).append(idx)
+                entry_dict['main_work_rowspan'] = 0
+                processed_projects.append(entry_dict)
 
-            is_responsible = session['user_id'] == project['responsible_person_id']
-            can_edit_summary = is_responsible and project['summary_status'] in (None, 'rejected')
-            can_review = is_admin and project['summary_status'] == 'pending'
+            for key, indices in work_groups.items():
+                if indices:
+                    processed_projects[indices[0]]['main_work_rowspan'] = len(indices)
+            
+            all_entries_sorted = processed_projects
 
-            completion_statuses = []
-            for i in range(13, 23):
-                status = project[i]
-                if status:
-                    completion_statuses.append(status)
-                else:
-                    completion_statuses.append("未记录")
+    except sqlite3.OperationalError as e:
+        flash(f'数据库操作错误: {str(e)}', 'error')
+        return redirect(url_for('index'))
+    except Exception as e:
+        flash(f'数据加载失败: {str(e)}', 'error')
+        return redirect(url_for('index'))
 
-            completion_date = datetime.datetime.strptime(
-                project['completion_time_finished'], "%Y-%m-%d"
-            ).date() if project['completion_time_finished'] else None
-            current_date = current_datetime.date()
-            days_diff = (current_date - completion_date).days if completion_date else 0
+    if request.method == 'POST' and 'export' in request.form:
+        try:
+            with get_db() as conn:
+                df = pd.read_sql_query('''
+                    SELECT 
+                        fp.id AS 项目ID,
+                        fp.category AS 类别,
+                        fp.project_name AS 项目名称,
+                        fp.main_work AS 主要工作,
+                        fp.work_goal AS 工作目标,
+                        fp.completion_time AS 计划完成时间,
+                        u1.username AS 责任人,
+                        fp.responsible_department AS 责任部门,
+                        fp.collaborator AS 配合人,
+                        fp.collaborating_department AS 配合部门,
+                        u3.username AS 责任领导,
+                        fp.completion_time_finished AS 实际完成时间,
+                        CASE 
+                            WHEN fp.completion_time_finished > fp.completion_time 
+                                THEN '逾期' 
+                            ELSE '正常' 
+                        END AS 状态
+                    FROM finished_projects fp
+                    LEFT JOIN users u1 ON fp.responsible_person_id = u1.id
+                    LEFT JOIN users u3 ON fp.responsible_leader_id = u3.id
+                ''', conn)
+                
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                    df.to_excel(writer, index=False, sheet_name='已完成项目')
+                buffer.seek(0)
+                
+                return send_file(
+                    buffer,
+                    as_attachment=True,
+                    download_name=f'finished_projects_export_{datetime.datetime.now().strftime("%Y%m%d%H%M")}.xlsx',
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
+        except Exception as e:
+            flash(f'导出失败: {str(e)}', 'error')
 
-            if request.method == 'POST':
-                if 'submit_summary' in request.form and can_edit_summary:
-                    summary = request.form.get('final_summary', '').strip()
-                    if summary:
-                        conn.execute('''
-                            UPDATE finished_projects SET
-                                final_summary = ?,
-                                summary_status = 'pending',
-                                summary_submitted_at = CURRENT_TIMESTAMP,
-                                review_comment = NULL
-                            WHERE id = ?
-                        ''', (summary, project_id))
-                        conn.commit()
-                        flash('总结已提交，等待审核', 'success')
-                    else:
-                        flash('总结内容不能为空', 'error')
-                    return redirect(url_for('finished_project_detail', project_id=project_id))
-
-                if 'review_summary' in request.form and can_review:
-                    action = request.form.get('review_result')
-                    comment = request.form.get('review_comment', '').strip()
-                    
-                    if action not in ['approved', 'rejected']:
-                        flash('无效的审核操作', 'error')
-                        return redirect(url_for('finished_project_detail', project_id=project_id))
-                    
-                    if action == 'rejected' and not comment:
-                        flash('驳回必须填写审核意见', 'error')
-                        return redirect(url_for('finished_project_detail', project_id=project_id))
-                    
-                    conn.execute('''
-                        UPDATE finished_projects 
-                        SET summary_status = ?,
-                            review_comment = ?,
-                            summary_reviewed_at = CURRENT_TIMESTAMP
-                        WHERE id = ?
-                    ''', (action, comment if action == 'rejected' else None, project_id))
-                    conn.commit()
-                    flash(f'总结已{"通过" if action == "approved" else "驳回"}', 'success')
-                    return redirect(url_for('finished_project_detail', project_id=project_id))
-
-            project_data = {
-                'id': project['id'],
-                'category': project['category'],
-                'project_name': project['project_name'],
-                'main_work': project['main_work'],
-                'work_goal': project['work_goal'],
-                'original_completion_time': format_datetime(project['completion_time']),
-                'responsible_person': project['responsible_person'],
-                'responsible_department': project['responsible_department'],
-                'collaborator': project['collaborator'],
-                'collaborating_department': project['collaborating_department'],
-                'responsible_leader': project['responsible_leader'],
-                'completion_time_finished': format_datetime(project['completion_time_finished']),
-                'final_summary': project['final_summary'],
-                'summary_status': project['summary_status'],
-                'review_comment': project['review_comment'],
-                'summary_submitted_at': format_datetime(project['summary_submitted_at']),
-                'summary_reviewed_at': format_datetime(project['summary_reviewed_at']),
-                'completion_statuses': completion_statuses,
-                'days_since_completion': days_diff,
-                'is_overdue': days_diff > 30 and project['summary_status'] != 'approved'
-            }
-
-        except sqlite3.Error as e:
-            flash(f'数据库错误: {str(e)}', 'error')
-            return redirect(url_for('finished_projects'))
-        except ValueError as e:
-            flash(f'日期格式错误: {str(e)}', 'error')
-            return redirect(url_for('finished_projects'))
-
-    return render_template(
-        'finished_project_detail.html',
-        project=project_data,
-        is_admin=is_admin,
-        is_responsible=is_responsible,
-        can_edit_summary=can_edit_summary,
-        can_review=can_review,
-        current_datetime=current_datetime,
-        status_labels={
-            'pending': ('待审核', 'warning'),
-            'approved': ('已通过', 'success'),
-            'rejected': ('已驳回', 'danger')
-        },
-        overdue_warning=project_data['is_overdue']
-    )
+    return render_template('finished_projects.html',
+                        all_entries_sorted=all_entries_sorted,
+                        is_admin=is_admin,
+                        current_datetime=current_datetime)
 
 @app.route('/edit_finished_project/<int:project_id>', methods=['GET', 'POST'])
 def edit_finished_project(project_id):

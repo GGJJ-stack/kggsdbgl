@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>已完成项目</title>
     <style>
+        /* 保持原有样式不变 */
         table {
             width: 100%;
             border: 2px solid #6C8EBF;
@@ -128,53 +129,46 @@
                 {% for entry in all_entries_sorted %}
                     {% set current_group = [
                         entry.main_work,
-                        entry.entry_data.work_goal,
-                        entry.entry_data.responsible_person
+                        entry.work_goal,
+                        entry.responsible_person
                     ] %}
                     <tr class="
-                        {% if entry.entry_data.status == '逾期' %}overdue{% endif %}
+                        {% if entry.status == '逾期' %}overdue{% endif %}
                         {% if current_group == prev_group %}duplicate-row{% endif %}
                     ">
                         <td>{{ loop.index }}</td>
-                        {% if entry.category_rowspan > 0 %}
-                        <td rowspan="{{ entry.category_rowspan }}" 
-                            style="background: #f8f9fa;font-weight:600">
+                        {% if entry.main_work_rowspan > 0 %}
+                        <td rowspan="{{ entry.main_work_rowspan }}">
                             {{ entry.category }}
                         </td>
-                        {% endif %}
-
-                        {% if entry.project_rowspan > 0 %}
-                        <td rowspan="{{ entry.project_rowspan }}">
+                        <td rowspan="{{ entry.main_work_rowspan }}">
                             {{ entry.project_name }}
                         </td>
-                        {% endif %}
-
-                        {% if entry.main_work_rowspan > 0 %}
                         <td rowspan="{{ entry.main_work_rowspan }}">
                             {{ entry.main_work }}
                         </td>
                         {% endif %}
 
-                        <td>{{ entry.entry_data.work_goal|default('', true)|truncate(15) }}</td>
-                        <td>{{ entry.entry_data.completion_time|dateformat('%Y-%m-%d') }}</td>
-                        <td>{{ entry.entry_data.responsible_person|default('-', true) }}</td>
-                        <td>{{ entry.entry_data.responsible_department }}</td>
-                        <td>{{ entry.entry_data.collaborator|default('-', true) }}</td>
-                        <td>{{ entry.entry_data.collaborating_department|default('-', true) }}</td>
-                        <td>{{ entry.entry_data.responsible_leader|default('-', true) }}</td>
+                        <td>{{ entry.work_goal|default('', true)|truncate(15) }}</td>
+                        <td>{{ entry.plan_date|dateformat('%Y-%m-%d') }}</td>
+                        <td>{{ entry.responsible_person|default('-', true) }}</td>
+                        <td>{{ entry.responsible_department }}</td>
+                        <td>{{ entry.collaborator|default('-', true) }}</td>
+                        <td>{{ entry.collaborating_department|default('-', true) }}</td>
+                        <td>{{ entry.responsible_leader|default('-', true) }}</td>
                         <td>
-                            <span class="{% if entry.entry_data.status == '逾期' %}status-overdue{% endif %}">
-                                {{ entry.entry_data.completion_time_finished|dateformat('%Y-%m-%d') }}
+                            <span class="{% if entry.status == '逾期' %}status-overdue{% endif %}">
+                                {{ entry.completion_time_finished|dateformat('%Y-%m-%d') }}
                             </span>
                         </td>
                         <td>
                             <div style="display:flex;flex-direction:column;gap:2px">
-                                <a href="{{ url_for('finished_project_detail', project_id=entry.entry_data.id) }}"
+                                <a href="{{ url_for('finished_project_detail', project_id=entry.project_id) }}"
                                    class="btn">详情</a>
                                 {% if is_admin %}
                                 <form method="POST" action="{{ url_for('finished_projects') }}">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <input type="hidden" name="project_id" value="{{ entry.entry_data.id }}">
+                                    <input type="hidden" name="project_id" value="{{ entry.project_id }}">
                                     <button type="submit" name="delete_project" class="btn btn-delete" 
                                             onclick="return confirm('确认删除该已完成项目？')">
                                         删除
