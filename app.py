@@ -1178,7 +1178,6 @@ def finished_projects():
 
     with get_db() as conn:
         try:
-            # 修正SQL查询：为可能重复的列添加别名
             raw_projects = conn.execute('''
                 SELECT 
                     fp.id AS project_id,
@@ -1186,7 +1185,7 @@ def finished_projects():
                     fp.project_name,
                     fp.main_work,
                     fp.work_goal,
-                    fp.completion_time,
+                    fp.completion_time AS plan_date,  -- 添加plan_date别名
                     u1.username AS responsible_person,
                     fp.responsible_department,
                     fp.collaborator,
@@ -1204,7 +1203,6 @@ def finished_projects():
                 ORDER BY fp.category, fp.project_name, fp.main_work
             ''').fetchall()
 
-            # 分组逻辑保持不变
             work_groups = {}
             for idx, entry in enumerate(raw_projects):
                 work_key = (entry['category'], entry['project_name'], entry['main_work'])
@@ -1212,7 +1210,6 @@ def finished_projects():
 
             all_entries_sorted = [dict(entry) for entry in raw_projects]
             
-            # 添加行跨度处理
             for work_key, indices in work_groups.items():
                 first_entry = all_entries_sorted[indices[0]]
                 first_entry['main_work_rowspan'] = len(indices)
@@ -1226,7 +1223,6 @@ def finished_projects():
             flash(f'数据加载失败: {str(e)}', 'error')
             return redirect(url_for('index'))
 
-    # 导出功能修正：明确指定列避免冲突
     if request.method == 'POST' and 'export' in request.form:
         try:
             with get_db() as conn:
@@ -1237,7 +1233,7 @@ def finished_projects():
                         fp.project_name AS 项目名称,
                         fp.main_work AS 主要工作,
                         fp.work_goal AS 工作目标,
-                        fp.completion_time AS 计划完成时间,
+                        fp.completion_time AS 计划完成时间,  -- 确保导出字段正确
                         u1.username AS 责任人,
                         fp.responsible_department AS 责任部门,
                         fp.collaborator AS 配合人,
