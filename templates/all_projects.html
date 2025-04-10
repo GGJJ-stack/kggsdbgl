@@ -5,150 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>全部项目总览</title>
     <style>
-        /* 新增重复项目样式 */
-        .repeat-item {
-            color: #888 !important;
-        }
-        .repeat-overdue {
-            color: #F0C8A8 !important;
-        }
-
-        /* 保持原有CSS样式不变 */
-        body {
-            background: #F5F7FA;
-            margin: 0;
-            font-family: 'Segoe UI', sans-serif;
-            min-height: 100vh;
-        }
-
-        .main-container {
-            width: 100%;
-            padding: 0 20px;
-            box-sizing: border-box;
-        }
-
-        h1 {
-            color: #4A647B;
-            border-bottom: 2px solid #D79B77;
-            padding-bottom: 8px;
-            margin: 20px 0;
-        }
-
-        .btn-main {
-            background: #6C8EBF;
-            color: white;
-            padding: 5px 12px;
-            border-radius: 4px;
-            text-decoration: none;
-            display: inline-block;
-            transition: all 0.3s;
-            position: relative;
-            overflow: hidden;
-            border: none;
-            cursor: pointer;
-            font-size: 13px;
-            margin: 2px;
-        }
-
-        .btn-main:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 3px 8px rgba(108, 142, 191, 0.3);
-        }
-
-        table {
-            width: 100%;
-            border: 2px solid #6C8EBF;
-            border-collapse: collapse;
-            margin-top: 20px;
-            box-shadow: 0 2px 12px rgba(108, 142, 191, 0.1);
-        }
-
-        th, td {
-            border: 1px solid #B8C7D9;
-            padding: 8px;
-            text-align: center;
-            vertical-align: middle;
-            word-wrap: break-word;
-        }
-
-        th {
-            background: #E1E8F0;
-            color: #4A647B;
-            font-weight: 600;
-            border-bottom: 3px solid #D79B77;
-        }
-
-        th:nth-child(1) { width: 4%; }
-        th:nth-child(2) { width: 6%; }
-        th:nth-child(3) { width: 10%; }
-        th:nth-child(6) { width: 7%; }
-        th:nth-child(7) { width: 7%; }
-        th:nth-child(13) { width: 6%; }
-        th:nth-child(14) { width: 6%; }
-        th:nth-child(4) { width: 11%; }
-        th:nth-child(5) { width: 7.6%; }
-        th:nth-child(6) { width: 7.6%; }
-        th:nth-child(7) { width: 7.6%; }
-        th:nth-child(8) { width: 7.6%; }
-        th:nth-child(9) { width: 7.6%; }
-        th:nth-child(10) { width: 7.6%; }
-        th:nth-child(11) { width: 7.6%; }
-        th:nth-child(12) { width: 6%; }
-        th:nth-child(13) { width: 6%; }
-
+        .repeat-item { color: #888 !important; }
+        .repeat-overdue { color: #F0C8A8 !important; }
+        body { background: #F5F7FA; margin: 0; font-family: 'Segoe UI', sans-serif; min-height: 100vh; }
+        .main-container { width: 100%; padding: 0 20px; box-sizing: border-box; }
+        h1 { color: #4A647B; border-bottom: 2px solid #D79B77; padding-bottom: 8px; margin: 20px 0; }
+        .btn-main { background: #6C8EBF; color: white; padding: 5px 12px; border-radius: 4px; text-decoration: none; 
+            display: inline-block; transition: all 0.3s; position: relative; overflow: hidden; border: none; cursor: pointer; 
+            font-size: 13px; margin: 2px; }
+        .btn-main:hover { transform: translateY(-2px); box-shadow: 0 3px 8px rgba(108, 142, 191, 0.3); }
+        table { width: 100%; border: 2px solid #6C8EBF; border-collapse: collapse; margin-top: 20px; 
+            box-shadow: 0 2px 12px rgba(108, 142, 191, 0.1); }
+        th, td { border: 1px solid #B8C7D9; padding: 8px; text-align: center; vertical-align: middle; word-wrap: break-word; }
+        th { background: #E1E8F0; color: #4A647B; font-weight: 600; border-bottom: 3px solid #D79B77; }
+        th:nth-child(1) { width: 4%; } th:nth-child(2) { width: 6%; } th:nth-child(3) { width: 10%; }
+        th:nth-child(6) { width: 7%; } th:nth-child(7) { width: 7%; } th:nth-child(13) { width: 6%; }
+        th:nth-child(14) { width: 6%; } th:nth-child(4) { width: 11%; } th:nth-child(5) { width: 7.6%; }
         .status-overdue { color: #D79B77 !important; }
-        tr.overdue-unfinished td { 
-            background: #FFF4F0;
-            color: #D79B77 !important;
-            font-weight: 600;
-        }
-
-        #queryModal {
-            display: none;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
-            z-index: 1000;
-            width: 400px;
-        }
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 10px;
-            margin-bottom: 15px;
-        }
-        .modal-close {
-            cursor: pointer;
-            font-size: 20px;
-        }
-        .query-type-group {
-            margin-bottom: 15px;
-        }
-        .query-type-group label {
-            display: block;
-            margin: 8px 0;
-        }
-        .date-input-group {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-        .date-input-group input {
-            flex: 1;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        .modal-actions {
-            text-align: right;
-        }
+        tr.overdue-unfinished td { background: #FFF4F0; color: #D79B77 !important; font-weight: 600; }
+        #queryModal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 15px rgba(0,0,0,0.2); z-index: 1000; width: 400px; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; 
+            padding-bottom: 10px; margin-bottom: 15px; }
+        .modal-close { cursor: pointer; font-size: 20px; }
+        .query-type-group { margin-bottom: 15px; }
+        .query-type-group label { display: block; margin: 8px 0; }
+        .date-input-group { display: flex; gap: 10px; margin-bottom: 15px; }
+        .date-input-group input { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        .modal-actions { text-align: right; }
     </style>
 </head>
 <body>
@@ -158,7 +42,6 @@
         <div style="margin-bottom:15px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
             <a href="{{ url_for('index') }}" class="btn-main">返回主菜单</a>
             <form method="post" action="{{ url_for('all_projects') }}" style="margin:0;" onsubmit="return handleExport(event)">
-                <!-- 修正CSRF令牌字段 -->
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="export" value="true">
                 <button type="submit" class="btn-main">一键导出Excel</button>
@@ -238,7 +121,6 @@
         </table>
     </div>
 
-    <!-- 查询模态框 -->
     <div id="queryModal">
         <div class="modal-header">
             <h3>高级查询</h3>
@@ -265,7 +147,34 @@
     </div>
 
     <script>
-        // 增强版导出功能（保持原样）
+        function mergeCells() {
+            mergeColumn(1);
+            mergeColumn(2);
+            mergeColumn(3);
+        }
+
+        function mergeColumn(colIndex) {
+            const rows = document.querySelectorAll('table tbody tr');
+            let prevCell = null;
+            let span = 1;
+
+            rows.forEach((row, index) => {
+                const cell = row.cells[colIndex];
+                if (prevCell) {
+                    if (cell.textContent.trim() === prevCell.textContent.trim()) {
+                        span++;
+                        prevCell.rowSpan = span;
+                        cell.style.display = 'none';
+                    } else {
+                        prevCell = cell;
+                        span = 1;
+                    }
+                } else {
+                    prevCell = cell;
+                    span = 1;
+                }
+            });
+        }
         async function handleExport(event) {
             event.preventDefault();
             try {
@@ -297,7 +206,6 @@
             }
         }
 
-        // 修正后的查询功能
         function handleQuerySubmit(event) {
             event.preventDefault();
             
@@ -343,16 +251,9 @@
                 });
         }
 
-        // 模态框控制（保持原样）
-        function showQueryModal() {
-            document.getElementById('queryModal').style.display = 'block';
-        }
+        function showQueryModal() { document.getElementById('queryModal').style.display = 'block'; }
+        function closeQueryModal() { document.getElementById('queryModal').style.display = 'none'; }
 
-        function closeQueryModal() {
-            document.getElementById('queryModal').style.display = 'none';
-        }
-
-        // 页面初始化（保持原样）
         document.addEventListener('DOMContentLoaded', () => {
             const today = new Date().toISOString().split('T')[0];
             document.getElementById('startDate').value = today;
@@ -361,6 +262,7 @@
             document.getElementById('queryModal').addEventListener('click', function(e) {
                 if (e.target === this) closeQueryModal();
             });
+            mergeCells();
         });
     </script>
 </body>

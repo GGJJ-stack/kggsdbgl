@@ -19,7 +19,7 @@
             vertical-align: middle;
             word-wrap: break-word;
             white-space: normal;
-            word-break: break-word;  /* 修改为更合理的换行方式 */
+            word-break: break-word;
         }
         th {
             background: #E1E8F0;
@@ -127,7 +127,25 @@
                     <td colspan="13" class="no-data">暂无已完成项目数据</td>
                 </tr>
             {% else %}
+                {% set prev_category = None %}
+                {% set category_rowspan = 1 %}
+                {% for entry in all_entries_sorted %}
+                    {% if loop.index0 == 0 %}
+                        {% set prev_category = entry.category %}
+                        {% set category_rowspan = 1 %}
+                    {% else %}
+                        {% if entry.category == prev_category %}
+                            {% set category_rowspan = category_rowspan + 1 %}
+                        {% else %}
+                            {% set category_rowspan = 1 %}
+                            {% set prev_category = entry.category %}
+                        {% endif %}
+                    {% endif %}
+                {% endfor %}
+
                 {% set prev_group = [] %}
+                {% set prev_category = None %}
+                {% set current_category_count = 0 %}
                 {% for entry in all_entries_sorted %}
                     {% set current_group = [
                         entry.main_work,
@@ -139,10 +157,18 @@
                         {% if current_group == prev_group %}duplicate-row{% endif %}
                     ">
                         <td>{{ loop.index }}</td>
+                        {# 修正类别列合并逻辑 #}
+                        {% if loop.first or entry.category != prev_category %}
+                            {% set current_category_count = 1 %}
+                            {% for e in all_entries_sorted[loop.index0:] if e.category == entry.category %}
+                                {% set current_category_count = current_category_count + 1 %}
+                            {% endfor %}
+                            <td rowspan="{{ current_category_count }}">
+                                {{ entry.category }}
+                            </td>
+                        {% endif %}
+                        
                         {% if entry.main_work_rowspan > 0 %}
-                        <td rowspan="{{ entry.main_work_rowspan }}">
-                            {{ entry.category }}
-                        </td>
                         <td rowspan="{{ entry.main_work_rowspan }}">
                             {{ entry.project_name }}
                         </td>
@@ -183,6 +209,7 @@
                     </tr>
                     {% set _ = prev_group.clear() %}
                     {% set _ = prev_group.extend(current_group) %}
+                    {% set prev_category = entry.category %}
                 {% endfor %}
             {% endif %}
         </tbody>
