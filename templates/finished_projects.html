@@ -127,25 +127,8 @@
                     <td colspan="13" class="no-data">暂无已完成项目数据</td>
                 </tr>
             {% else %}
-                {% set prev_category = None %}
-                {% set category_rowspan = 1 %}
-                {% for entry in all_entries_sorted %}
-                    {% if loop.index0 == 0 %}
-                        {% set prev_category = entry.category %}
-                        {% set category_rowspan = 1 %}
-                    {% else %}
-                        {% if entry.category == prev_category %}
-                            {% set category_rowspan = category_rowspan + 1 %}
-                        {% else %}
-                            {% set category_rowspan = 1 %}
-                            {% set prev_category = entry.category %}
-                        {% endif %}
-                    {% endif %}
-                {% endfor %}
-
                 {% set prev_group = [] %}
                 {% set prev_category = None %}
-                {% set current_category_count = 0 %}
                 {% for entry in all_entries_sorted %}
                     {% set current_group = [
                         entry.main_work,
@@ -157,10 +140,10 @@
                         {% if current_group == prev_group %}duplicate-row{% endif %}
                     ">
                         <td>{{ loop.index }}</td>
-                        {# 修正类别列合并逻辑 #}
+                        {# 修正类别合并逻辑 #}
                         {% if loop.first or entry.category != prev_category %}
                             {% set current_category_count = 1 %}
-                            {% for e in all_entries_sorted[loop.index0:] if e.category == entry.category %}
+                            {% for e in all_entries_sorted[loop.index0+1:] if e.category == entry.category %}
                                 {% set current_category_count = current_category_count + 1 %}
                             {% endfor %}
                             <td rowspan="{{ current_category_count }}">
@@ -168,6 +151,7 @@
                             </td>
                         {% endif %}
                         
+                        {# 保持原有项目名称和主要工作的合并逻辑 #}
                         {% if entry.main_work_rowspan > 0 %}
                         <td rowspan="{{ entry.main_work_rowspan }}">
                             {{ entry.project_name }}
@@ -177,9 +161,7 @@
                         </td>
                         {% endif %}
 
-                        <!-- 修复工作目标显示：移除truncate过滤器 -->
                         <td>{{ entry.work_goal|default('', true) }}</td>
-                        <!-- 确保计划时间字段正确显示 -->
                         <td>{{ entry.plan_date|dateformat('%Y-%m-%d') }}</td>
                         <td>{{ entry.responsible_person|default('-', true) }}</td>
                         <td>{{ entry.responsible_department }}</td>

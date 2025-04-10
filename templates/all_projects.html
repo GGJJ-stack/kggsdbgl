@@ -18,9 +18,20 @@
             box-shadow: 0 2px 12px rgba(108, 142, 191, 0.1); }
         th, td { border: 1px solid #B8C7D9; padding: 8px; text-align: center; vertical-align: middle; word-wrap: break-word; }
         th { background: #E1E8F0; color: #4A647B; font-weight: 600; border-bottom: 3px solid #D79B77; }
-        th:nth-child(1) { width: 4%; } th:nth-child(2) { width: 6%; } th:nth-child(3) { width: 10%; }
-        th:nth-child(6) { width: 7%; } th:nth-child(7) { width: 7%; } th:nth-child(13) { width: 6%; }
-        th:nth-child(14) { width: 6%; } th:nth-child(4) { width: 11%; } th:nth-child(5) { width: 7.6%; }
+        th:nth-child(1) { width: 5%; }
+        th:nth-child(2) { width: 6%; }
+        th:nth-child(3) { width: 10%; }
+        th:nth-child(4) { width: 10%; }
+        th:nth-child(5) { width: 7.125%; }
+        th:nth-child(6) { width: 7.125%; }
+        th:nth-child(7) { width: 7.125%; }
+        th:nth-child(8) { width: 7.125%; }
+        th:nth-child(9) { width: 7.125%; }
+        th:nth-child(10) { width: 7.125%; }
+        th:nth-child(11) { width: 7.125%; }
+        th:nth-child(12) { width: 7.125%; }
+        th:nth-child(13) { width: 6%; }
+        th:nth-child(14) { width: 6%; }
         .status-overdue { color: #D79B77 !important; }
         tr.overdue-unfinished td { background: #FFF4F0; color: #D79B77 !important; font-weight: 600; }
         #queryModal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
@@ -69,7 +80,6 @@
                 </tr>
             </thead>
             <tbody>
-                {% set seen = {} %}
                 {% if not all_projects %}
                     <tr>
                         <td colspan="14" style="text-align:center; padding:20px; color:#666;">
@@ -77,22 +87,10 @@
                         </td>
                     </tr>
                 {% else %}
-                    {% for proj in all_projects %}
-                        {% set key = proj.main_work ~ proj.work_goal ~ proj.responsible_person %}
-                        {% if key in seen %}
-                            {% set _ = seen.update({key: seen[key] + 1}) %}
-                            {% set is_repeat = seen[key] > 1 %}
-                        {% else %}
-                            {% set _ = seen.update({key: 1}) %}
-                            {% set is_repeat = False %}
-                        {% endif %}
-                        
-                        <tr class="
-                            {% if proj.status == '逾期' and not proj.is_finished %}overdue-unfinished{% endif %}
-                            {% if is_repeat %}{% if proj.status == '逾期' %}repeat-overdue{% else %}repeat-item{% endif %}{% endif %}
-                        ">
+                    {% for proj in all_projects|sort(attribute='main_work')|sort(attribute='project_name')|sort(attribute='category.name') %}
+                        <tr class="{% if proj.status == '逾期' and not proj.is_finished %}overdue-unfinished{% endif %}">
                             <td data-label="序号">{{ loop.index }}</td>
-                            <td data-label="类别">{{ proj.category }}</td>
+                            <td data-label="类别">{{ proj.category.name }}</td>
                             <td data-label="项目名称">{{ proj.project_name }}</td>
                             <td data-label="主要工作">{{ proj.main_work }}</td>
                             <td data-label="工作目标">{{ proj.work_goal }}</td>
@@ -148,33 +146,29 @@
 
     <script>
         function mergeCells() {
-            mergeColumn(1);
-            mergeColumn(2);
-            mergeColumn(3);
-        }
+            const columnsToMerge = [1, 2, 3]; // 需要合并的列索引：类别、项目名称、主要工作
+            
+            columnsToMerge.forEach(colIndex => {
+                let prevCell = null;
+                let span = 1;
+                let startRow = null;
 
-        function mergeColumn(colIndex) {
-            const rows = document.querySelectorAll('table tbody tr');
-            let prevCell = null;
-            let span = 1;
-
-            rows.forEach((row, index) => {
-                const cell = row.cells[colIndex];
-                if (prevCell) {
-                    if (cell.textContent.trim() === prevCell.textContent.trim()) {
+                document.querySelectorAll('table tbody tr').forEach((row, index) => {
+                    const cell = row.cells[colIndex];
+                    
+                    if (prevCell && cell.textContent.trim() === prevCell.textContent.trim()) {
                         span++;
-                        prevCell.rowSpan = span;
+                        startRow.cells[colIndex].rowSpan = span;
                         cell.style.display = 'none';
                     } else {
                         prevCell = cell;
                         span = 1;
+                        startRow = row;
                     }
-                } else {
-                    prevCell = cell;
-                    span = 1;
-                }
+                });
             });
         }
+
         async function handleExport(event) {
             event.preventDefault();
             try {
@@ -262,6 +256,8 @@
             document.getElementById('queryModal').addEventListener('click', function(e) {
                 if (e.target === this) closeQueryModal();
             });
+            
+            // 合并单元格操作
             mergeCells();
         });
     </script>
