@@ -87,10 +87,10 @@
                         </td>
                     </tr>
                 {% else %}
-                    {% for proj in all_projects|sort(attribute='main_work')|sort(attribute='project_name')|sort(attribute='category.name') %}
+                    {% for proj in all_projects|sort(attribute='main_work')|sort(attribute='project_name')|sort(attribute='category') %}
                         <tr class="{% if proj.status == '逾期' and not proj.is_finished %}overdue-unfinished{% endif %}">
                             <td data-label="序号">{{ loop.index }}</td>
-                            <td data-label="类别">{{ proj.category.name }}</td>
+                            <td data-label="类别">{{ proj.category }}</td>
                             <td data-label="项目名称">{{ proj.project_name }}</td>
                             <td data-label="主要工作">{{ proj.main_work }}</td>
                             <td data-label="工作目标">{{ proj.work_goal }}</td>

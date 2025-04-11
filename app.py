@@ -566,8 +566,8 @@ def profile():
                 query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
                 conn.execute(query, params)
                 conn.commit()
-
-            return redirect(url_for('profile', current_datetime=current_datetime))
+                flash('个人信息修改成功，3秒后自动返回首页...', 'success')
+                return redirect(url_for('index'))
 
         user = conn.execute(
             "SELECT username, phone FROM users WHERE id=?",
@@ -575,7 +575,7 @@ def profile():
         ).fetchone()
 
     return render_template('profile.html', user=user, current_datetime=current_datetime)
-
+    
 @app.route('/add_project', methods=['GET', 'POST'])
 def add_project():
     current_datetime = datetime.datetime.now()

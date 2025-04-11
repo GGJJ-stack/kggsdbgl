@@ -6,88 +6,55 @@
     <title>个人信息修改</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <style>
-        /* 基础样式保障 */
-        body {
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f6fa;
-            font-family: 'Microsoft YaHei', sans-serif;
-        }
-        .profile-container {
-            max-width: 600px;
-            margin: 40px auto;
-            padding: 30px;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
-        }
-        .profile-title {
-            color: #2c3e50;
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid transparent;
+            border-radius: 4px;
             text-align: center;
-            margin-bottom: 30px;
-            font-size: 24px;
-            position: relative;
-            padding-bottom: 15px;
         }
-        .profile-title::after {
-            content: '';
-            display: block;
-            width: 50px;
-            height: 3px;
-            background: #3498db;
-            position: absolute;
-            bottom: 0;
-            left: 50%;
-            transform: translateX(-50%);
+        .alert-success {
+            color: #3c763d;
+            background-color: #dff0d8;
+            border-color: #d6e9c6;
         }
-        .profile-form {
-            margin-top: 25px;
+        .alert-info {
+            color: #31708f;
+            background-color: #d9edf7;
+            border-color: #bce8f1;
         }
-        .form-group {
-            margin-bottom: 25px;
+        .alert-warning {
+            color: #8a6d3b;
+            background-color: #fcf8e3;
+            border-color: #faebcc;
         }
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            color: #57606f;
-            font-weight: 500;
-        }
-        .form-input {
-            width: 100%;
-            padding: 12px 15px;
-            border: 2px solid #dcdde1;
-            border-radius: 8px;
-            font-size: 16px;
-            transition: border-color 0.3s ease;
-        }
-        .form-input:focus {
-            border-color: #3498db;
-            outline: none;
-        }
-        .submit-btn {
-            width: 100%;
-            padding: 14px;
-            background: #3498db;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-top: 15px;
-        }
-        .submit-btn:hover {
-            background: #2980b9;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+        .alert-danger {
+            color: #a94442;
+            background-color: #f2dede;
+            border-color: #ebccd1;
         }
     </style>
 </head>
 <body>
     <div class="profile-container">
         <h2 class="profile-title">个人信息修改</h2>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+                <script>
+                    setTimeout(function() {
+                        window.location.href = "{{ url_for('index') }}";
+                    }, 3000);
+                </script>
+            {% endif %}
+        {% endwith %}
+
         <form method="post" class="profile-form">
-            <!-- 添加CSRF令牌 -->
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             
             <div class="form-group">
