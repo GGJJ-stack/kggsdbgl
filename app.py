@@ -575,7 +575,7 @@ def profile():
         ).fetchone()
 
     return render_template('profile.html', user=user, current_datetime=current_datetime)
-    
+
 @app.route('/add_project', methods=['GET', 'POST'])
 def add_project():
     current_datetime = datetime.datetime.now()
@@ -1178,6 +1178,7 @@ def finished_projects():
 
     with get_db() as conn:
         try:
+            # 获取原始项目数据
             raw_projects = conn.execute('''
                 SELECT 
                     fp.id AS project_id,
@@ -1185,7 +1186,7 @@ def finished_projects():
                     fp.project_name,
                     fp.main_work,
                     fp.work_goal,
-                    fp.completion_time AS plan_date,  -- 添加plan_date别名
+                    fp.completion_time AS plan_date,
                     u1.username AS responsible_person,
                     fp.responsible_department,
                     fp.collaborator,
@@ -1203,18 +1204,34 @@ def finished_projects():
                 ORDER BY fp.category, fp.project_name, fp.main_work
             ''').fetchall()
 
+            # 预处理数据：添加合并信息
             work_groups = {}
             for idx, entry in enumerate(raw_projects):
                 work_key = (entry['category'], entry['project_name'], entry['main_work'])
                 work_groups.setdefault(work_key, []).append(idx)
 
+            # 转换字典为列表并添加rowspan信息
             all_entries_sorted = [dict(entry) for entry in raw_projects]
-            
             for work_key, indices in work_groups.items():
                 first_entry = all_entries_sorted[indices[0]]
                 first_entry['main_work_rowspan'] = len(indices)
                 for i in indices[1:]:
                     all_entries_sorted[i]['main_work_rowspan'] = 0
+
+            # 添加类别合并信息
+            current_category = None
+            category_start = 0
+            for idx, entry in enumerate(all_entries_sorted):
+                if entry['category'] != current_category:
+                    if current_category is not None:
+                        for i in range(category_start, idx):
+                            all_entries_sorted[i]['category_rowspan'] = idx - category_start
+                    current_category = entry['category']
+                    category_start = idx
+            # 处理最后一个类别
+            if current_category is not None:
+                for i in range(category_start, len(all_entries_sorted)):
+                    all_entries_sorted[i]['category_rowspan'] = len(all_entries_sorted) - category_start
 
         except sqlite3.OperationalError as e:
             flash(f'数据库操作错误: {str(e)}', 'error')
@@ -1223,51 +1240,10 @@ def finished_projects():
             flash(f'数据加载失败: {str(e)}', 'error')
             return redirect(url_for('index'))
 
-    if request.method == 'POST' and 'export' in request.form:
-        try:
-            with get_db() as conn:
-                df = pd.read_sql_query('''
-                    SELECT 
-                        fp.id AS 项目ID,
-                        fp.category AS 类别,
-                        fp.project_name AS 项目名称,
-                        fp.main_work AS 主要工作,
-                        fp.work_goal AS 工作目标,
-                        fp.completion_time AS 计划完成时间,  -- 确保导出字段正确
-                        u1.username AS 责任人,
-                        fp.responsible_department AS 责任部门,
-                        fp.collaborator AS 配合人,
-                        fp.collaborating_department AS 配合部门,
-                        u3.username AS 责任领导,
-                        fp.completion_time_finished AS 实际完成时间,
-                        CASE 
-                            WHEN fp.completion_time_finished > fp.completion_time 
-                                THEN '逾期' 
-                            ELSE '正常' 
-                        END AS 状态
-                    FROM finished_projects fp
-                    LEFT JOIN users u1 ON fp.responsible_person_id = u1.id
-                    LEFT JOIN users u3 ON fp.responsible_leader_id = u3.id
-                ''', conn)
-                
-                buffer = io.BytesIO()
-                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                    df.to_excel(writer, index=False, sheet_name='已完成项目')
-                buffer.seek(0)
-                
-                return send_file(
-                    buffer,
-                    as_attachment=True,
-                    download_name=f'finished_projects_export_{datetime.datetime.now().strftime("%Y%m%d%H%M")}.xlsx',
-                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                )
-        except Exception as e:
-            flash(f'导出失败: {str(e)}', 'error')
-
     return render_template('finished_projects.html',
-                        all_entries_sorted=all_entries_sorted,
-                        is_admin=is_admin,
-                        current_datetime=current_datetime)
+                         all_entries_sorted=all_entries_sorted,
+                         is_admin=is_admin,
+                         current_datetime=current_datetime)
 
 @app.route('/delete_finished_project/<int:project_id>', methods=['POST'])
 @admin_required

@@ -249,10 +249,6 @@
         function closeQueryModal() { document.getElementById('queryModal').style.display = 'none'; }
 
         document.addEventListener('DOMContentLoaded', () => {
-            const today = new Date().toISOString().split('T')[0];
-            document.getElementById('startDate').value = today;
-            document.getElementById('endDate').value = today;
-            
             document.getElementById('queryModal').addEventListener('click', function(e) {
                 if (e.target === this) closeQueryModal();
             });

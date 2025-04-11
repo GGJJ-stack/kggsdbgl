@@ -1,9 +1,11 @@
+<!-- templates/finished_projects.html -->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <title>已完成项目</title>
     <style>
+        /* 保持原有样式不变 */
         table {
             width: 100%;
             border: 2px solid #6C8EBF;
@@ -139,22 +141,14 @@
                         {% if current_group == prev_group %}duplicate-row{% endif %}
                     ">
                         <td>{{ loop.index }}</td>
-                        {# 修正后的类别合并逻辑 #}
-                        {% if loop.first or entry.category != prev_category %}
-                            {% set current_category_count = 1 %}
-                            {% for e in all_entries_sorted[loop.index0+1:] %}
-                                {% if e.category == entry.category %}
-                                    {% set current_category_count = current_category_count + 1 %}
-                                {% else %}
-                                    {% break %}
-                                {% endif %}
-                            {% endfor %}
-                            <td rowspan="{{ current_category_count }}">
+                        {# 类别合并 #}
+                        {% if loop.first or entry.category != all_entries_sorted[loop.index0-1].category %}
+                            <td rowspan="{{ entry.category_rowspan }}">
                                 {{ entry.category }}
                             </td>
                         {% endif %}
                         
-                        {# 保持原有项目名称和主要工作的合并逻辑 #}
+                        {# 项目名称和主要工作合并 #}
                         {% if entry.main_work_rowspan > 0 %}
                         <td rowspan="{{ entry.main_work_rowspan }}">
                             {{ entry.project_name }}
@@ -194,7 +188,6 @@
                     </tr>
                     {% set _ = prev_group.clear() %}
                     {% set _ = prev_group.extend(current_group) %}
-                    {% set prev_category = entry.category %}
                 {% endfor %}
             {% endif %}
         </tbody>
