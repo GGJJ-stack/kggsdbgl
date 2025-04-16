@@ -1,1732 +1,1435 @@
 import os
-from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, session, abort, flash, send_file, g, jsonify, make_response
-from werkzeug.security import generate_password_hash, check_password_hash
-from flask_wtf.csrf import CSRFProtect, validate_csrf, CSRFError
-from urllib.parse import urlparse, urlunparse, unquote
-from contextlib import closing
-import sqlite3
-import secrets
-import datetime
-import io
-import sys
+import json
+import logging
+from logging.handlers import RotatingFileHandler
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
+from flask import (
+    Flask, render_template, request, redirect, 
+    session, send_file, send_from_directory, 
+    flash, url_for, jsonify
+)
+from flask_sqlalchemy import SQLAlchemy
 import pandas as pd
-from werkzeug.middleware.proxy_fix import ProxyFix
+from apscheduler.schedulers.background import BackgroundScheduler
+from io import BytesIO
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import func, text
+from flask_migrate import Migrate
 
-app = Flask(__name__)
-csrf = CSRFProtect(app)
+# 初始化Flask应用
+app = Flask(__name__, static_folder='static', template_folder='templates')
 
-app.wsgi_app = ProxyFix(
-    app.wsgi_app,
-    x_for=1,
-    x_proto=1,
-    x_host=1,
-    x_prefix=1
+# 生产环境配置
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-production-secret-key')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
+    'DATABASE_URL',
+    'mysql+pymysql://user:password@localhost/prod_db?charset=utf8mb4'
 )
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB文件上传限制
+app.config['UPLOAD_FOLDER'] = '/var/www/uploads'
+ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
 
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+# 初始化数据库
+db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
-WEBHOOK_SECRET = b'c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4'
+# 生产日志配置
+if not app.debug:
+    if not os.path.exists('logs'):
+        os.mkdir('logs')
+    file_handler = RotatingFileHandler(
+        'logs/app.log',
+        maxBytes=1024*1024*10,
+        backupCount=5
+    )
+    file_handler.setFormatter(logging.Formatter(
+        '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+    ))
+    file_handler.setLevel(logging.INFO)
+    app.logger.addHandler(file_handler)
+    app.logger.setLevel(logging.INFO)
+    app.logger.info('Application startup')
 
-class Config:
-    UPLOAD_FOLDER = os.path.join(BASE_DIR, 'instance', 'project_files')
-    DATABASE_PATH = os.path.join(BASE_DIR, 'instance', 'supervision.db')
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'your-secret-key-here'  # 使用固定密钥或确保环境变量设置
+# 数据库模型
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(20), unique=True, nullable=False)
+    password = db.Column(db.String(60), nullable=False)
+    department = db.Column(db.String(50))
+    phone = db.Column(db.String(20))
+    is_admin = db.Column(db.Boolean, default=False)
+    is_department_info = db.Column(db.Boolean, default=False)
+    is_department_head = db.Column(db.Boolean, default=False)
+    is_company_info = db.Column(db.Boolean, default=False)
+    is_general_dept_head = db.Column(db.Boolean, default=False)
+    is_company_leader = db.Column(db.Boolean, default=False)
 
-    @classmethod
-    def init(cls):
-        os.makedirs(cls.UPLOAD_FOLDER, exist_ok=True)
-        db_dir = os.path.dirname(cls.DATABASE_PATH)
-        if not os.path.exists(db_dir):
-            os.makedirs(db_dir, mode=0o755, exist_ok=True)
+class WeeklyReport(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    reporter = db.Column(db.String(20), nullable=False)
+    department = db.Column(db.String(50), nullable=False)
+    content = db.Column(db.Text)
+    report_type = db.Column(db.String(20), nullable=False)
+    status = db.Column(db.String(10))
+    submit_time = db.Column(db.DateTime, default=datetime.utcnow)
+    report_date = db.Column(db.Date)
 
-Config.init()
+class SupervisionProject(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    project_name = db.Column(db.String(100), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-app.config.update(
-    SECRET_KEY=Config.SECRET_KEY,
-    DATABASE=Config.DATABASE_PATH,
-    UPLOAD_FOLDER=Config.UPLOAD_FOLDER,
-    WTF_CSRF_TIME_LIMIT=7200,
-    SESSION_COOKIE_SECURE=True,
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='Lax',
-    PREFERRED_URL_SCHEME='https',
-    WTF_CSRF_SSL_STRICT=False,
-    MAX_CONTENT_LENGTH=100 * 1024 * 1024
-)
+class SupervisionDetail(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('supervision_project.id'), nullable=False)
+    main_content = db.Column(db.String(200), nullable=False)
+    key_node = db.Column(db.String(100))
+    responsible_dept = db.Column(db.String(50))
+    responsible_person = db.Column(db.String(20))
+    cooperating_dept = db.Column(db.String(200))
+    cooperating_persons = db.Column(db.String(200))
+    responsible_leader = db.Column(db.String(20))
+    deadline = db.Column(db.Date)
+    completion_time = db.Column(db.Date)
+    status = db.Column(db.String(10), default='进行中')
+    last_status_update = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    project = db.relationship('SupervisionProject', backref='details')
 
-def get_db():
-    if not hasattr(g, '_database'):
+class ProgressRecord(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    detail_id = db.Column(db.Integer, db.ForeignKey('supervision_detail.id'), nullable=False)
+    submitter = db.Column(db.String(20), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    submit_time = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    status = db.Column(db.String(10), default='待审核')
+    reviewer = db.Column(db.String(20))
+
+class ProjectPlan(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    plan_name = db.Column(db.String(100), nullable=False)
+    category = db.Column(db.String(20), default='项目类')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class TimePlan(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    plan_name = db.Column(db.String(100), nullable=False)
+    category = db.Column(db.String(20), default='时间类')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class ProjectPlanDetail(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    plan_id = db.Column(db.Integer, db.ForeignKey('project_plan.id'), nullable=False)
+    main_content = db.Column(db.String(200), nullable=False)
+    key_node = db.Column(db.String(100))
+    responsible_dept = db.Column(db.String(50))
+    responsible_person = db.Column(db.String(20))
+    cooperating_dept = db.Column(db.String(200))
+    cooperating_persons = db.Column(db.String(200))
+    responsible_leader = db.Column(db.String(20))
+    deadline = db.Column(db.Date)
+    completion_time = db.Column(db.Date)
+    status = db.Column(db.String(10), default='进行中')
+    last_status_update = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+class PlanProgressRecord(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    detail_id = db.Column(db.Integer, db.ForeignKey('project_plan_detail.id'), nullable=False)
+    submitter = db.Column(db.String(20), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    submit_time = db.Column(db.DateTime, default=datetime.utcnow)
+    status = db.Column(db.String(10), default='待审核')
+    reviewer = db.Column(db.String(20))
+
+class PersonalWeeklyReport(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    current_work = db.Column(db.Text)
+    next_plan = db.Column(db.Text)
+    submitted = db.Column(db.Boolean, default=False)
+    department_submitted = db.Column(db.Boolean, default=False)
+    submit_time = db.Column(db.DateTime)
+    archived = db.Column(db.Boolean, default=False)
+    report_date = db.Column(db.Date)
+    user = db.relationship('User', backref='weekly_reports')
+
+class PersonalWeeklyTemplate(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    current_work = db.Column(db.Text)
+    next_plan = db.Column(db.Text)
+
+class HistoricalWeeklyReport(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    content = db.Column(db.Text)
+    page = db.Column(db.Integer)
+
+class CompanyWeeklyReport(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    department = db.Column(db.String(50), nullable=False)
+    current_work = db.Column(db.Text)
+    next_plan = db.Column(db.Text)
+    submitted = db.Column(db.Boolean, default=False)
+    submitter = db.Column(db.String(20))
+    submit_time = db.Column(db.DateTime)
+    archived = db.Column(db.Boolean, default=False)
+    archive_time = db.Column(db.DateTime)
+
+# 定时任务配置（中国时区）
+scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
+
+def check_overdue_projects():
+    with app.app_context():
         try:
-            g._database = sqlite3.connect(app.config['DATABASE'])
-            g._database.row_factory = sqlite3.Row
-            init_sqlite_schema(g._database)
-        except sqlite3.Error as e:
-            print(f"数据库连接失败: {str(e)}")
-            raise
-    return g._database
-
-def admin_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not session.get('is_admin'):
-            abort(403)
-        return f(*args, **kwargs)
-    return decorated_function
-
-def init_sqlite_schema(conn):
-    try:
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL UNIQUE,
-                password TEXT NOT NULL,
-                phone TEXT,
-                is_admin INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS unfinished_projects (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                category TEXT NOT NULL,
-                project_name TEXT NOT NULL,
-                main_work TEXT NOT NULL,
-                work_goal TEXT NOT NULL,
-                completion_time DATE NOT NULL,
-                responsible_person_id INTEGER REFERENCES users(id),
-                responsible_department TEXT NOT NULL,
-                collaborator TEXT,
-                collaborating_department TEXT,
-                responsible_leader_id INTEGER REFERENCES users(id),
-                is_finished INTEGER DEFAULT 0 CHECK(is_finished IN (0, 1)),
-                completion_status_1 TEXT,
-                completion_status_2 TEXT,
-                completion_status_3 TEXT,
-                completion_status_4 TEXT,
-                completion_status_5 TEXT,
-                completion_status_6 TEXT,
-                completion_status_7 TEXT,
-                completion_status_8 TEXT,
-                completion_status_9 TEXT,
-                completion_status_10 TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS finished_projects (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                original_id INTEGER,
-                category TEXT NOT NULL,
-                project_name TEXT NOT NULL,
-                main_work TEXT NOT NULL,
-                work_goal TEXT NOT NULL,
-                completion_time DATE NOT NULL,
-                responsible_person_id INTEGER REFERENCES users(id),
-                responsible_department TEXT NOT NULL,
-                collaborator TEXT,
-                collaborating_department TEXT,
-                responsible_leader_id INTEGER REFERENCES users(id),
-                completion_status_1 TEXT,
-                completion_status_2 TEXT,
-                completion_status_3 TEXT,
-                completion_status_4 TEXT,
-                completion_status_5 TEXT,
-                completion_status_6 TEXT,
-                completion_status_7 TEXT,
-                completion_status_8 TEXT,
-                completion_status_9 TEXT,
-                completion_status_10 TEXT,
-                completion_time_finished DATE,
-                final_summary TEXT,
-                summary_status TEXT CHECK(summary_status IN ('pending', 'approved', 'rejected')),
-                summary_submitted_at TIMESTAMP,
-                summary_reviewed_at TIMESTAMP,
-                review_comment TEXT
-            )
-        ''')
-
-        admin_exists = conn.execute(
-            "SELECT id FROM users WHERE username = 'admin'"
-        ).fetchone()
-
-        if not admin_exists:
-            hashed_pw = generate_password_hash('admin123gg')
-            conn.execute(
-                '''
-                INSERT INTO users (username, password, phone, is_admin)
-                VALUES (?, ?, ?, 1)
-                ''',
-                ('admin', hashed_pw, '13800138000')
-            )
-
-        conn.commit()
-
-    except sqlite3.Error as e:
-        print(f'数据库初始化失败: {str(e)}')
-        conn.rollback()
-        raise  
-    except Exception as e:
-        print(f'系统错误: {str(e)}')
-        conn.rollback()
-        raise
-
-def format_datetime(value, format='%Y-%m-%d'):
-    if isinstance(value, str):
-        try:
-            date_obj = datetime.datetime.strptime(value, '%Y-%m-%d')
-            return date_obj.strftime(format)
-        except ValueError:
-            return value
-    elif isinstance(value, datetime.date):
-        return value.strftime(format)
-    return value
-
-app.jinja_env.filters['dateformat'] = format_datetime
-app.jinja_env.globals.update(enumerate=enumerate, datetime=datetime)
-
-def admin_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not session.get('is_admin'):
-            abort(403)
-        return f(*args, **kwargs)
-    return decorated_function
-
-@app.route('/webhook', methods=['POST'])
-@csrf.exempt
-def webhook_handler():
-    try:
-        data = request.get_json()
-        
-        if not data:
-            app.logger.error("Webhook received empty payload")
-            return jsonify({"status": "error", "message": "Empty payload"}), 400
+            tz = ZoneInfo("Asia/Shanghai")
+            now = datetime.now(tz).date()
+            overdue_details = SupervisionDetail.query.filter(
+                SupervisionDetail.status.in_(['进行中', '逾期']),
+                SupervisionDetail.deadline < now
+            ).all()
             
-        app.logger.info(f"Received webhook data: {data}")
-        
-        event_type = data.get('event')
-        if event_type == 'project_updated':
-            pass
-        elif event_type == 'user_created':
-            pass
+            for detail in overdue_details:
+                if detail.status != '逾期':
+                    detail.status = '逾期'
+                    detail.last_status_update = datetime.now(tz)
             
-        return jsonify({"status": "success"}), 200
-        
-    except Exception as e:
-        app.logger.error(f"Webhook processing failed: {str(e)}")
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    current_datetime = datetime.datetime.now()
-    if request.method == 'POST':
-        try:
-            username = request.form.get('username', '').strip()
-            password = request.form.get('password', '').strip()
-            next_url = request.form.get('next', '')
-            
-            if next_url:
-                parsed = urlparse(next_url)
-                if parsed.netloc != '' or not parsed.path.startswith('/'):
-                    next_url = url_for('index')
-                elif '//' in parsed.path:
-                    next_url = url_for('index')
-
-            if not username or not password:
-                return render_template('login.html', 
-                    error='用户名和密码不能为空',
-                    current_datetime=current_datetime), 400
-
-            with get_db() as conn:
-                c = conn.cursor()
-                c.execute(
-                    "SELECT id, password, is_admin FROM users WHERE username = ?",
-                    (username,)
-                )
-                user = c.fetchone()
-                
-                if user and check_password_hash(user['password'], password):
-                    session.clear()
-                    session['user_id'] = user['id']
-                    session['is_admin'] = user['is_admin']
-                    session.permanent = True
-                    session.modified = True  
-                    
-                    response = redirect(next_url or url_for('index'))
-                    return response
-                
-            return render_template('login.html', 
-                error='用户名或密码错误',
-                current_datetime=current_datetime), 401
-        
-        except sqlite3.Error as e:
-            app.logger.error(f"数据库查询错误: {str(e)}")
-            return render_template('login.html', 
-                error='数据库连接失败，请联系管理员',
-                current_datetime=current_datetime), 500
+            db.session.commit()
         except Exception as e:
-            app.logger.error(f"登录异常: {str(e)}")
-            return render_template('login.html', 
-                error='登录处理异常，请稍后重试',
-                current_datetime=current_datetime), 500
-    
-    next_url = request.args.get('next', '')
-    if next_url:
-        parsed = urlparse(next_url)
-        if parsed.netloc != '' or not parsed.path.startswith('/'):
-            next_url = ''
-        elif '//' in parsed.path:
-            next_url = ''
+            app.logger.error(f"定时任务执行错误: {str(e)}")
 
-    return render_template(
-        'login.html', 
-        current_datetime=current_datetime, 
-        next=next_url
+def transfer_weekly_reports():
+    with app.app_context():
+        try:
+            tz = ZoneInfo("Asia/Shanghai")
+            now = datetime.now(tz)
+            
+            # 转移个人周报
+            personal_reports = WeeklyReport.query.filter_by(report_type='personal').all()
+            for report in personal_reports:
+                report.report_type = 'history_personal'
+                report.report_date = now.date()
+            
+            # 转移部门周报
+            department_reports = WeeklyReport.query.filter_by(report_type='department').all()
+            for report in department_reports:
+                new_history = WeeklyReport(
+                    reporter=report.reporter,
+                    department=report.department,
+                    content=report.content,
+                    report_type='history_department',
+                    submit_time=now
+                )
+                db.session.add(new_history)
+                db.session.delete(report)
+            
+            # 转移公司周报
+            company_reports = CompanyWeeklyReport.query.all()
+            for report in company_reports:
+                new_history = WeeklyReport(
+                    reporter='system',
+                    department=report.department,
+                    content=json.dumps({
+                        'current_work': report.current_work,
+                        'next_plan': report.next_plan
+                    }),
+                    report_type='history_company',
+                    submit_time=now
+                )
+                db.session.add(new_history)
+                db.session.delete(report)
+            
+            db.session.commit()
+        except Exception as e:
+            app.logger.error(f"周报转移错误: {str(e)}")
+
+scheduler.add_job(check_overdue_projects, 'cron', hour=0)
+scheduler.add_job(transfer_weekly_reports, 'cron', day_of_week='sun', hour=12)
+scheduler.start()
+
+# 辅助函数
+def valid_approver():
+    user = User.query.filter_by(username=session['user']).first()
+    return user.is_admin or user.is_company_leader
+
+def has_company_permission():
+    user = User.query.filter_by(username=session['user']).first()
+    return user.is_general_dept_head or user.is_company_info or user.is_company_leader
+
+def check_permission(user, target_user):
+    return (
+        user.is_company_info or 
+        user.is_general_dept_head or
+        user.is_company_leader or
+        (user.is_department_info and user.department == target_user.department) or
+        (user.is_department_head and user.department == target_user.department) or
+        user.id == target_user.id
     )
 
-@app.errorhandler(CSRFError)
-def handle_csrf_error(e):
-    return render_template('error.html', message=e.description), 400
+@app.context_processor
+def inject_permissions():
+    def check_company_write_permission(user, department):
+        if user.is_company_info or user.is_general_dept_head:
+            return True
+        return user.department == department and not CompanyWeeklyReport.query.filter_by(
+            department=department, archived=False, submitted=True).first()
+    
+    return dict(
+        check_company_write_permission=check_company_write_permission,
+        check_permission=check_permission  
+    )
 
-@app.route('/')
-def index():
-    current_datetime = datetime.datetime.now()
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    return render_template('index.html', current_datetime=current_datetime)
+# 路由部分
+@app.route('/', methods=['GET', 'POST'])  
+def login():
+    if request.method == 'POST':
+        user = User.query.filter_by(
+            username=request.form['username'],
+            password=request.form['password']
+        ).first()
+        if user:
+            session['user'] = user.username
+            session['is_admin'] = user.is_admin
+            return redirect('/home')
+    return render_template('login.html')
 
-@app.route('/user_management', methods=['GET', 'POST'])
-@admin_required
+@app.route('/user_profile', methods=['GET', 'POST'])
+def user_profile():
+    if 'user' not in session:
+        return redirect('/')
+    
+    user = User.query.filter_by(username=session['user']).first()
+    
+    if request.method == 'POST':
+        user.phone = request.form['phone']
+        user.password = request.form['password']
+        db.session.commit()
+        return redirect('/home')
+    
+    return render_template('user_profile.html',
+                         username=user.username,
+                         phone=user.phone,
+                         password=user.password)
+
+@app.route('/home')
+def home():
+    if 'user' not in session:
+        return redirect('/')
+    return render_template('index.html', 
+                         is_admin=session.get('is_admin', False),
+                         username=session['user'])
+
+@app.route('/plan_management')
+def plan_management():
+    if 'user' not in session:
+        return redirect('/')
+    project_plans = ProjectPlan.query.all()
+    time_plans = TimePlan.query.all()
+    return render_template('plan_management.html',
+                         project_plans=project_plans,
+                         time_plans=time_plans)
+
+@app.route('/add_project_plan', methods=['POST'])
+def add_project_plan():
+    if 'user' not in session or not session.get('is_admin'):
+        return redirect('/')
+    new_plan = ProjectPlan(plan_name=request.form['plan_name'])
+    db.session.add(new_plan)
+    db.session.commit()
+    return redirect('/plan_management')
+
+@app.route('/add_time_plan', methods=['POST'])
+def add_time_plan():
+    if 'user' not in session or not session.get('is_admin'):
+        return redirect('/')
+    new_plan = TimePlan(plan_name=request.form['plan_name'])
+    db.session.add(new_plan)
+    db.session.commit()
+    return redirect('/plan_management')
+
+@app.route('/delete_project_plan/<int:plan_id>')
+def delete_project_plan(plan_id):
+    if 'user' not in session or not session.get('is_admin'):
+        return redirect('/')
+    plan = ProjectPlan.query.get(plan_id)
+    db.session.delete(plan)
+    db.session.commit()
+    return redirect('/plan_management')
+
+@app.route('/delete_time_plan/<int:plan_id>')
+def delete_time_plan(plan_id):
+    if 'user' not in session or not session.get('is_admin'):
+        return redirect('/')
+    plan = TimePlan.query.get(plan_id)
+    db.session.delete(plan)
+    db.session.commit()
+    return redirect('/plan_management')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect('/')
+
+@app.route('/user_management')
 def user_management():
-    current_datetime = datetime.datetime.now()
-    error = None
-    with get_db() as conn:
-        users = []
-        if request.method == 'POST':
-            try:
-                if 'download_users' in request.form:
-                    filename = request.form.get('filename', 'users').strip() or 'users'
-                    filename += '.xlsx'
-                    
-                    buffer = io.BytesIO()
-                    df = pd.read_sql_query("SELECT * FROM users", conn)
-                    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                        df.to_excel(writer, index=False)
-                    buffer.seek(0)
-                    
-                    return send_file(
-                        buffer,
-                        as_attachment=True,
-                        download_name=filename,
-                        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                    )
+    if 'user' not in session or not session.get('is_admin'):
+        return redirect('/')
+    users = User.query.all()
+    return render_template('user_management.html', users=users)
 
-                elif 'upload_users' in request.form:
-                    file = request.files.get('file')
-                    if not file or file.filename == '':
-                        flash('没有选择文件', 'error')
-                        return redirect(request.url)
-                        
-                    if not file.filename.lower().endswith(('.xlsx', '.xls')):
-                        flash('仅支持Excel文件（.xlsx/.xls）', 'error')
-                        return redirect(request.url)
+@app.route('/import_users', methods=['POST'])
+def import_users():
+    if 'user' not in session or not session.get('is_admin'):
+        return redirect('/')
+    
+    if 'file' not in request.files:
+        return "未选择文件", 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return "无效文件", 400
+    
+    try:
+        df = pd.read_excel(file)
+        for _, row in df.iterrows():
+            new_user = User(
+                username=row['用户名'],
+                password=row['密码'],
+                department=row.get('部门', ''),
+                phone=row.get('电话', ''),
+                is_admin=row.get('管理员', False),
+                is_department_info=row.get('部门信息员', False),
+                is_department_head=row.get('部门负责人', False),
+                is_company_info=row.get('公司信息员', False),
+                is_general_dept_head=row.get('综合部负责人', False),
+                is_company_leader=row.get('公司领导', False)
+            )
+            db.session.add(new_user)
+        db.session.commit()
+        return redirect('/user_management')
+    except Exception as e:
+        db.session.rollback()
+        return f"导入失败: {str(e)}", 400
 
-                    df = pd.read_excel(file)
-                    required_columns = ['username', 'password']
-                    if not all(col in df.columns for col in required_columns):
-                        flash('Excel文件必须包含username和password列', 'error')
-                        return redirect(request.url)
-                        
-                    df['password'] = df['password'].apply(
-                        lambda x: generate_password_hash(str(x)) if pd.notnull(x) else None
-                    )
-                    
-                    try:
-                        df.to_sql('users', conn, if_exists='append', index=False)
-                        conn.commit()
-                        flash(f'成功上传 {len(df)} 条用户数据', 'success')
-                    except sqlite3.IntegrityError:
-                        conn.rollback()
-                        flash('部分用户名已存在，未插入重复数据', 'error')
-                    return redirect(request.url)
+@app.route('/export_users')
+def export_users():
+    if 'user' not in session or not session.get('is_admin'):
+        return redirect('/')
+    
+    users = User.query.all()
+    data = [{
+        '用户名': u.username,
+        '密码': u.password,
+        '部门': u.department,
+        '电话': u.phone,
+        '管理员': u.is_admin,
+        '部门信息员': u.is_department_info,
+        '部门负责人': u.is_department_head,
+        '公司信息员': u.is_company_info,
+        '综合部负责人': u.is_general_dept_head,
+        '公司领导': u.is_company_leader
+    } for u in users]
 
-                elif 'add_user' in request.form:
-                    username = request.form.get('username', '').strip()
-                    password = request.form.get('password', '123456').strip()
-                    phone = request.form.get('phone', '').strip()
-                    is_admin = 1 if request.form.get('is_admin') == '1' else 0
-
-                    if not username or not password:
-                        error = "用户名和密码不能为空"
-                    else:
-                        hashed_pw = generate_password_hash(password)
-                        try:
-                            conn.execute(
-                                "INSERT INTO users (username, password, phone, is_admin) VALUES (?, ?, ?, ?)",
-                                (username, hashed_pw, phone, is_admin)
-                            )
-                            conn.commit()
-                        except sqlite3.IntegrityError:
-                            error = "用户名已存在"
-
-                elif 'delete_user' in request.form:
-                    user_id = request.form.get('user_id')
-                    if user_id and user_id != str(session['user_id']):
-                        conn.execute("DELETE FROM users WHERE id=?", (user_id,))
-                        conn.commit()
-
-                elif 'update_user' in request.form:
-                    user_id = request.form.get('user_id')
-                    password = request.form.get('password', '123456').strip()
-                    phone = request.form.get('phone', '').strip()
-                    is_admin = 1 if request.form.get('is_admin') == '1' else 0
-
-                    updates = []
-                    params = []
-                    updates.append("password = ?")
-                    params.append(generate_password_hash(password))
-                    if phone:
-                        updates.append("phone = ?")
-                        params.append(phone)
-                    updates.append("is_admin = ?")
-                    params.append(is_admin)
-                    params.append(user_id)
-
-                    query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
-                    conn.execute(query, params)
-                    conn.commit()
-
-            except Exception as e:
-                error = str(e)
-                flash(f'操作失败: {str(e)}', 'error')
-            
-        users = conn.execute("SELECT id, username, phone, is_admin FROM users").fetchall()
-
-    return render_template('user_management.html', 
-                         users=users, 
-                         error=error, 
-                         current_datetime=current_datetime)
+    df = pd.DataFrame(data)
+    output = BytesIO()
+    df.to_excel(output, index=False, engine='openpyxl')
+    output.seek(0)
+    
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        download_name='用户列表.xlsx',
+        as_attachment=True
+    )
 
 @app.route('/add_user', methods=['GET', 'POST'])
 def add_user():
-    current_datetime = datetime.datetime.now()
-    if 'user_id' not in session or not session.get('is_admin'):
-        abort(403)
-
-    error = None
     if request.method == 'POST':
-        try:
-            username = request.form.get('username', '').strip()
-            password = request.form.get('password', '').strip()
-            if not password:
-                password = '123456'  # 设置初始密码
-            phone = request.form.get('phone', '').strip()
-            is_admin = 1 if request.form.get('is_admin') == '1' else 0
+        new_user = User(
+            username=request.form['username'],
+            password=request.form['password'],
+            department=request.form['department'],
+            phone=request.form['phone'],
+            is_admin='is_admin' in request.form,
+            is_department_info='is_department_info' in request.form,
+            is_department_head='is_department_head' in request.form,
+            is_company_info='is_company_info' in request.form,
+            is_general_dept_head='is_general_dept_head' in request.form,
+            is_company_leader='is_company_leader' in request.form
+        )
+        db.session.add(new_user)
+        db.session.commit()
+        return redirect('/user_management')
+    return render_template('add_user.html')
 
-            if not username or not password:
-                raise ValueError("用户名和密码不能为空")
-
-            hashed_pw = generate_password_hash(password)
-            with get_db() as conn:
-                conn.execute(
-                    "INSERT INTO users (username, password, phone, is_admin) VALUES (?, ?, ?, ?)",
-                    (username, hashed_pw, phone, is_admin)
-                )
-                conn.commit()
-            return redirect(url_for('user_management', current_datetime=current_datetime))
-
-        except sqlite3.IntegrityError as e:
-            error = "用户名已存在"
-        except Exception as e:
-            error = str(e)
-
-    return render_template('add_user.html', error=error, current_datetime=current_datetime)
+@app.route('/delete_user/<int:user_id>')
+def delete_user(user_id):
+    user = User.query.get(user_id)
+    PersonalWeeklyReport.query.filter_by(user_id=user_id).delete()
+    
+    db.session.delete(user)
+    db.session.commit()
+    return redirect('/user_management')
 
 @app.route('/edit_user/<int:user_id>', methods=['GET', 'POST'])
 def edit_user(user_id):
-    current_datetime = datetime.datetime.now()
-    if 'user_id' not in session or not session.get('is_admin'):
-        abort(403)
+    user = User.query.get(user_id)
+    if request.method == 'POST':
+        user.username = request.form['username']
+        user.department = request.form.get('department', '')
+        user.phone = request.form.get('phone', '')
+        user.is_admin = 'is_admin' in request.form
+        user.is_department_info = 'is_department_info' in request.form
+        user.is_department_head = 'is_department_head' in request.form
+        user.is_company_info = 'is_company_info' in request.form
+        user.is_general_dept_head = 'is_general_dept_head' in request.form
+        user.is_company_leader = 'is_company_leader' in request.form
+        if request.form.get('password'):
+            user.password = request.form['password']   
+        try:
+            db.session.commit()
+            return redirect('/user_management')
+        except Exception as e:
+            db.session.rollback()
+            return f"更新失败: {str(e)}", 500
+    return render_template('edit_user.html', user=user)
 
-    with get_db() as conn:
-        if request.method == 'POST':
-            try:
-                password = request.form.get('password', '').strip()
-                if not password:
-                    password = '123456'  # 设置初始密码
-                phone = request.form.get('phone', '').strip()
-                is_admin = 1 if request.form.get('is_admin') == '1' else 0
+@app.route('/supervision')
+def supervision():
+    if 'user' not in session:
+        return redirect('/')
+    projects = SupervisionProject.query.all()
+    return render_template('supervision.html', projects=projects)
 
-                updates = []
-                params = []
-                if password:
-                    updates.append("password = ?")
-                    params.append(generate_password_hash(password))
-                if phone:
-                    updates.append("phone = ?")
-                    params.append(phone)
+@app.route('/add_supervision', methods=['POST'])
+def add_supervision():
+    if 'user' not in session:
+        return redirect('/')
+    project_name = request.form['project_name']
+    new_project = SupervisionProject(project_name=project_name)
+    db.session.add(new_project)
+    db.session.commit()
+    return redirect('/supervision')
 
-                updates.append("is_admin = ?")
-                params.append(is_admin)
-                params.append(user_id)
+@app.route('/delete_supervision/<int:project_id>')
+def delete_supervision(project_id):
+    project = SupervisionProject.query.get(project_id)
+    db.session.delete(project)
+    db.session.commit()
+    return redirect('/supervision')
 
-                query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
-                conn.execute(query, params)
-                conn.commit()
-                flash('用户信息更新成功', 'success')
-                return redirect(url_for('user_management', current_datetime=current_datetime))
-            except Exception as e:
-                flash(f'更新失败: {str(e)}', 'error')
+@app.route('/supervision_detail/<int:project_id>')
+def supervision_detail(project_id):
+    if 'user' not in session:
+        return redirect('/')
+    
+    project = SupervisionProject.query.get(project_id)
+    details = SupervisionDetail.query.filter_by(project_id=project_id).order_by(SupervisionDetail.main_content).all()
+    
+    merged_details = []
+    prev_content = None
+    for detail in details:
+        if detail.main_content != prev_content:
+            merged_details.append({
+                'main_content': detail.main_content,
+                'details': [detail],
+                'rowspan': 1
+            })
+            prev_content = detail.main_content
+        else:
+            merged_details[-1]['details'].append(detail)
+            merged_details[-1]['rowspan'] += 1
+    
+    users = User.query.all()
+    leaders = User.query.filter_by(is_company_leader=True).all()
+    
+    return render_template('supervision_detail.html',
+                         project=project,
+                         merged_details=merged_details,
+                         users=users,
+                         leaders=leaders,
+                         is_admin=session.get('is_admin', False),
+                         source='supervision') 
 
-        user = conn.execute("SELECT id, username, phone, is_admin FROM users WHERE id=?", (user_id,)).fetchone()
-
-    return render_template('edit_user.html', user=user, current_datetime=current_datetime)
-
-@app.route('/download_projects')
-def download_projects():
-    if 'user_id' not in session or not session.get('is_admin'):
-        abort(403)
+@app.route('/import_project_details/<int:project_id>', methods=['POST'])
+def import_project_details(project_id):
+    if 'user' not in session or not session.get('is_admin'):
+        return redirect('/')
     
     try:
-        with get_db() as conn:
-            df = pd.read_sql_query('''
-                SELECT 
-                    fp.category, 
-                    fp.project_name, 
-                    fp.main_work, 
-                    fp.work_goal, 
-                    fp.completion_time, 
-                    fp.responsible_department,
-                    u1.username AS responsible_person,
-                    u3.username AS responsible_leader,
-                    fp.completion_status_1,
-                    fp.completion_status_2,
-                    fp.completion_status_3,
-                    fp.completion_status_4,
-                    fp.completion_status_5,
-                    fp.completion_status_6,
-                    fp.completion_status_7,
-                    fp.completion_status_8,
-                    fp.completion_status_9,
-                    fp.completion_status_10,
-                    fp.completion_time_finished
-                FROM finished_projects fp
-                LEFT JOIN users u1 ON fp.responsible_person_id = u1.id
-                LEFT JOIN users u3 ON fp.responsible_leader_id = u3.id
-            ''', conn)
-            
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                df.to_excel(writer, index=False)
-            buffer.seek(0)
-            
-            return send_file(
-                buffer,
-                as_attachment=True,
-                download_name=f"projects_export_{datetime.datetime.now().strftime('%Y%m%d%H%M')}.xlsx",
-                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        file = request.files['file']
+        df = pd.read_excel(file, engine='openpyxl')
+        
+        for _, row in df.iterrows():
+            new_detail = SupervisionDetail(
+                project_id=project_id,
+                main_content=row['主要内容'],
+                key_node=row['关键节点'],
+                responsible_dept=row['责任部门'],
+                responsible_person=row['责任人'],
+                cooperating_dept=row['配合部门'],
+                cooperating_persons=row['配合人'],
+                responsible_leader=row['责任领导'],
+                deadline=datetime.strptime(row['完成时限'], '%Y-%m-%d') if pd.notnull(row['完成时限']) else None,
+                status='进行中'
             )
             
+            if new_detail.deadline and new_detail.deadline < datetime.now().date():
+                new_detail.status = '逾期'
+                
+            db.session.add(new_detail)
+        
+        db.session.commit()
+        return redirect(f'/supervision_detail/{project_id}')   
+    except Exception as e:
+        print(f"导入错误: {str(e)}")
+        return redirect(f'/supervision_detail/{project_id}')
+
+@app.route('/export_project_details/<int:project_id>')
+def export_project_details(project_id):
+    if 'user' not in session:
+        return redirect('/')
+    
+    details = SupervisionDetail.query.filter_by(project_id=project_id).all()
+    
+    data = [{
+        '主要内容': d.main_content,
+        '关键节点': d.key_node,
+        '责任部门': d.responsible_dept,
+        '责任人': d.responsible_person,
+        '配合部门': d.cooperating_dept,
+        '配合人': d.cooperating_persons,
+        '责任领导': d.responsible_leader,
+        '完成时限': d.deadline.strftime('%Y-%m-%d') if d.deadline else '',
+        '状态': d.status
+    } for d in details]
+
+    df = pd.DataFrame(data)
+    filename = f"project_{project_id}_details.xlsx"
+    df.to_excel(filename, index=False, engine='openpyxl')
+    
+    return send_from_directory('.', filename, as_attachment=True)
+
+@app.route('/add_project_detail/<int:project_id>', methods=['POST'])
+def add_project_detail(project_id):
+    if 'user' not in session or not session.get('is_admin'):
+        return redirect('/')
+    
+    try:
+        deadline_str = request.form.get('deadline')
+        deadline = None
+        if deadline_str:
+            deadline = datetime.strptime(deadline_str, '%Y-%m-%d').date()
+        
+        new_detail = SupervisionDetail(
+            project_id=project_id,
+            main_content=request.form['main_content'],
+            key_node=request.form['key_node'],
+            responsible_dept=request.form['responsible_dept'],
+            responsible_person=request.form['responsible_person'],
+            cooperating_dept=request.form.get('cooperating_dept', ''),
+            cooperating_persons=','.join(request.form.getlist('cooperating_persons')),
+            responsible_leader=request.form['responsible_leader'],
+            deadline=deadline,  # 使用处理后的日期对象
+            status='进行中'
+        )
+        
+        if new_detail.deadline and new_detail.deadline < datetime.now().date():
+            new_detail.status = '逾期'
+        
+        db.session.add(new_detail)
+        db.session.commit()
+        return redirect(f'/supervision_detail/{project_id}')
+    except ValueError as e:
+        db.session.rollback()
+        print(f"日期格式错误: {str(e)}")
+        return "日期格式无效，请使用YYYY-MM-DD格式", 400
+    except Exception as e:
+        db.session.rollback()
+        print(f"添加失败: {str(e)}")
+        return f"提交失败: {str(e)}", 500
+
+@app.route('/complete_project/<int:detail_id>', methods=['POST'])
+def complete_project(detail_id):
+    if 'user' not in session or not session.get('is_admin'):
+        return redirect('/')
+    
+    try:
+        completion_time_str = request.form.get('completion_time', '').strip()
+        if not completion_time_str:
+            raise ValueError("缺失完成时间参数")
+        try:
+            completion_time = datetime.strptime(completion_time_str, '%Y-%m-%d').date()
+        except ValueError:
+            raise ValueError("无效的日期格式，必须为YYYY-MM-DD")
+        
+        detail = SupervisionDetail.query.with_for_update().get_or_404(detail_id)
+        detail.completion_time = completion_time
+        if detail.deadline:
+            if completion_time > detail.deadline:
+                detail.status = '逾期完成'
+            else:
+                detail.status = '已完成'
+        else:
+            detail.status = '已完成'
+            
+        detail.last_status_update = datetime.utcnow()
+        db.session.commit()
+        
+        return redirect(url_for('supervision_detail', project_id=detail.project_id))
+        
+    except ValueError as e:
+        db.session.rollback()
+        flash(f'操作失败: {str(e)}', 'error')
+        return redirect(url_for('supervision_detail', project_id=detail.project_id))
+    
+    except SQLAlchemyError as e:  
+        db.session.rollback()
+        app.logger.error(f"数据库操作异常: {str(e)}")
+        flash('操作失败：数据库错误', 'error')
+        return redirect(url_for('supervision_detail', project_id=detail.project_id))
+    
+    except Exception as e:
+        db.session.rollback()
+        app.logger.critical(f"系统异常: {str(e)}")
+        flash('操作失败：系统错误', 'error')
+        return redirect(url_for('supervision_detail', project_id=detail.project_id))
+
+@app.route('/delete_project_detail/<int:detail_id>', methods=['DELETE'])
+def delete_project_detail(detail_id):
+    if 'user' not in session or not session.get('is_admin'):
+        return jsonify({'status': 'error', 'message': '未授权'}), 401
+    
+    try:
+        detail = db.session.query(SupervisionDetail).options(
+            db.joinedload(SupervisionDetail.project)
+        ).get_or_404(detail_id)
+        
+        project_id = detail.project_id
+        ProgressRecord.query.filter_by(detail_id=detail_id).delete()
+        db.session.delete(detail)
+        db.session.commit()
+        
+        return jsonify({'status': 'success', 'redirect': f'/supervision_detail/{project_id}'})
+    
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        app.logger.error(f"数据库删除错误: {str(e)}")
+        return jsonify({'status': 'error', 'message': '数据库操作失败'}), 500
+    
+    except Exception as e:
+        db.session.rollback()
+        app.logger.critical(f"系统级删除错误: {str(e)}")
+        return jsonify({'status': 'error', 'message': '系统异常'}), 500
+
+@app.route('/submit_progress/<int:detail_id>', methods=['POST'])
+def submit_progress(detail_id):
+    if 'user' not in session:
+        return redirect('/')
+    
+    detail = SupervisionDetail.query.get(detail_id)
+    current_user = session['user']
+    
+    if current_user not in [detail.responsible_person] + detail.cooperating_persons.split(','):
+        return "无操作权限", 403
+    
+    new_progress = ProgressRecord(
+        detail_id=detail_id,
+        submitter=current_user,
+        content=request.form['content']
+    )
+    db.session.add(new_progress)
+    db.session.commit()
+    return redirect(f'/project_progress/{detail_id}')
+
+@app.route('/review_progress/<int:progress_id>/<action>')
+def review_progress(progress_id, action):
+    if 'user' not in session or not session.get('is_admin'):
+        return redirect('/')
+    
+    progress = ProgressRecord.query.get(progress_id)
+    progress.status = '已通过' if action == 'approve' else '已驳回'
+    progress.reviewer = session['user']
+    db.session.commit()
+    return redirect(f'/project_progress/{progress.detail_id}')
+
+@app.route('/project_progress/<int:detail_id>')
+def project_progress(detail_id):
+    if 'user' not in session:
+        return redirect('/')
+    
+    detail = SupervisionDetail.query.get(detail_id)
+    progress_records = ProgressRecord.query.filter_by(detail_id=detail_id).order_by(ProgressRecord.submit_time.desc()).all()
+    
+    current_user = User.query.filter_by(username=session['user']).first()
+    cooperating_persons = [cp.strip() for cp in detail.cooperating_persons.split(',')] if detail.cooperating_persons else []
+    has_access = (
+        current_user.username == detail.responsible_person or
+        current_user.username in cooperating_persons
+    )
+    
+    return render_template('project_progress.html',
+                         detail=detail,
+                         progress_records=progress_records,
+                         is_admin=current_user.is_admin,
+                         is_company_leader=current_user.is_company_leader,
+                         has_access=has_access,
+                         current_user=current_user)  
+
+@app.route('/import_plan_details/<int:plan_id>', methods=['POST'])
+def import_plan_details(plan_id):
+    if 'user' not in session or not session.get('is_admin'):
+        return redirect('/')
+    
+    try:
+        file = request.files['file']
+        df = pd.read_excel(file, engine='openpyxl')
+        
+        for _, row in df.iterrows():
+            new_detail = ProjectPlanDetail(
+                plan_id=plan_id,
+                main_content=row['主要内容'],
+                key_node=row['关键节点'],
+                responsible_dept=row['责任部门'],
+                responsible_person=row['责任人'],
+                cooperating_dept=row['配合部门'],
+                cooperating_persons=row['配合人'],
+                responsible_leader=row['责任领导'],
+                deadline=datetime.strptime(row['完成时限'], '%Y-%m-%d') if pd.notnull(row['完成时限']) else None,
+                status='进行中'
+            )
+            
+            if new_detail.deadline and new_detail.deadline < datetime.now().date():
+                new_detail.status = '逾期'
+                
+            db.session.add(new_detail)
+        
+        db.session.commit()
+        return redirect(f'/project_plan_detail/{plan_id}')   
+    except Exception as e:
+        print(f"导入错误: {str(e)}")
+        return redirect(f'/project_plan_detail/{plan_id}')
+
+@app.route('/export_plan_details/<int:plan_id>')
+def export_plan_details(plan_id):
+    if 'user' not in session:
+        return redirect('/')
+    
+    details = ProjectPlanDetail.query.filter_by(plan_id=plan_id).all()
+    
+    data = [{
+        '主要内容': d.main_content,
+        '关键节点': d.key_node,
+        '责任部门': d.responsible_dept,
+        '责任人': d.responsible_person,
+        '配合部门': d.cooperating_dept,
+        '配合人': d.cooperating_persons,
+        '责任领导': d.responsible_leader,
+        '完成时限': d.deadline.strftime('%Y-%m-%d') if d.deadline else '',
+        '状态': d.status
+    } for d in details]
+
+    df = pd.DataFrame(data)
+    filename = f"plan_{plan_id}_details.xlsx"
+    df.to_excel(filename, index=False, engine='openpyxl')
+    
+    return send_from_directory('.', filename, as_attachment=True)
+
+@app.route('/add_plan_detail/<int:plan_id>', methods=['POST'])
+def add_plan_detail(plan_id):
+    if 'user' not in session or not session.get('is_admin'):
+        return redirect('/')
+    
+    try:
+        deadline_str = request.form.get('deadline')
+        deadline = None
+        if deadline_str:
+            deadline = datetime.strptime(deadline_str, '%Y-%m-%d').date()
+        
+        new_detail = ProjectPlanDetail(
+            plan_id=plan_id,
+            main_content=request.form['main_content'],
+            key_node=request.form['key_node'],
+            responsible_dept=request.form['responsible_dept'],
+            responsible_person=request.form['responsible_person'],
+            cooperating_dept=','.join(request.form.getlist('cooperating_dept')),
+            cooperating_persons=','.join(request.form.getlist('cooperating_persons')),
+            responsible_leader=request.form['responsible_leader'],
+            deadline=deadline,
+            status='进行中'
+        )
+        
+        if new_detail.deadline and new_detail.deadline < datetime.now().date():
+            new_detail.status = '逾期'
+        
+        db.session.add(new_detail)
+        db.session.commit()
+        return redirect(f'/project_plan_detail/{plan_id}')
+    except ValueError as e:
+        db.session.rollback()
+        print(f"日期格式错误: {str(e)}")
+        return "日期格式无效，请使用YYYY-MM-DD格式", 400
+    except Exception as e:
+        db.session.rollback()
+        print(f"添加失败: {str(e)}")
+        return f"提交失败: {str(e)}", 500
+
+@app.route('/complete_plan_detail/<int:detail_id>', methods=['POST'])
+def complete_plan_detail(detail_id):
+    if 'user' not in session or not session.get('is_admin'):
+        return redirect('/')
+    
+    try:
+        completion_time_str = request.form.get('completion_time', '').strip()
+        if not completion_time_str:
+            raise ValueError("缺失完成时间参数")
+        
+        completion_time = datetime.strptime(completion_time_str, '%Y-%m-%d').date()
+        
+        detail = ProjectPlanDetail.query.get_or_404(detail_id)
+        detail.completion_time = completion_time  # 使用用户输入的日期
+        detail.last_status_update = datetime.now(timezone.utc).replace(tzinfo=None)
+        
+        if detail.deadline:
+            if completion_time > detail.deadline:
+                detail.status = '逾期完成'
+            else:
+                detail.status = '已完成'
+        else:
+            detail.status = '已完成'
+            
+        db.session.commit()
+        return redirect(f'/project_plan_detail/{detail.plan_id}')
+        
+    except ValueError as e:
+        db.session.rollback()
+        flash(f'操作失败: {str(e)}', 'error')
+        return redirect(url_for('project_plan_detail', plan_id=detail.plan_id))
+    
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        app.logger.error(f"数据库操作异常: {str(e)}")
+        flash('操作失败：数据库错误', 'error')
+        return redirect(url_for('project_plan_detail', plan_id=detail.plan_id))
+    
+    except Exception as e:
+        db.session.rollback()
+        app.logger.critical(f"系统异常: {str(e)}")
+        flash('操作失败：系统错误', 'error')
+        return redirect(url_for('project_plan_detail', plan_id=detail.plan_id))
+
+@app.route('/delete_plan_detail/<int:detail_id>', methods=['POST'])  # 添加methods参数
+def delete_plan_detail(detail_id):
+    if 'user' not in session or not session.get('is_admin'):
+        return redirect('/')
+    
+    try:
+        detail = db.session.get(ProjectPlanDetail, detail_id)  # 修改为新的session.get方法
+        if detail:
+            plan_id = detail.plan_id       
+            PlanProgressRecord.query.filter_by(detail_id=detail_id).delete()
+            db.session.delete(detail)
+            db.session.commit()
+        return redirect(f'/project_plan_detail/{plan_id}')
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"删除错误: {str(e)}")
+        return redirect(f'/project_plan_detail/{plan_id}') if 'plan_id' in locals() else redirect('/plan_management')
+
+@app.route('/project_plan_detail/<int:plan_id>')
+def project_plan_detail(plan_id):
+    if 'user' not in session:
+        return redirect('/')
+    
+    plan = db.session.get(ProjectPlan, plan_id)
+    details = ProjectPlanDetail.query.filter_by(plan_id=plan_id).order_by(ProjectPlanDetail.main_content).all()
+    
+    merged_details = []
+    prev_content = None
+    for detail in details:
+        if detail.main_content != prev_content:
+            merged_details.append({
+                'main_content': detail.main_content,
+                'details': [detail],
+                'rowspan': 1
+            })
+            prev_content = detail.main_content
+        else:
+            merged_details[-1]['details'].append(detail)
+            merged_details[-1]['rowspan'] += 1
+    
+    users = User.query.all()
+    leaders = User.query.filter_by(is_company_leader=True).all()
+    
+    return render_template('supervision_detail.html',
+                         project=plan,
+                         merged_details=merged_details,
+                         users=users,
+                         leaders=leaders,
+                         is_admin=session.get('is_admin', False),
+                         source='plan')
+
+@app.route('/time_plan_detail/<int:plan_id>')
+def time_plan_detail(plan_id):
+    if 'user' not in session:
+        return redirect('/')
+    return render_template('time_plan_placeholder.html')
+
+@app.route('/submit_plan_progress/<int:detail_id>', methods=['POST'])
+def submit_plan_progress(detail_id):  # 修复路由参数名不一致问题
+    if 'user' not in session:
+        return redirect('/')
+    
+    detail = ProjectPlanDetail.query.get(detail_id)
+    current_user = session['user']
+    
+    cooperating_persons = detail.cooperating_persons.split(',') if detail.cooperating_persons else []
+    if current_user not in [detail.responsible_person] + cooperating_persons:
+        return "无操作权限", 403
+    
+    new_progress = PlanProgressRecord(
+        detail_id=detail_id,
+        submitter=current_user,
+        content=request.form['content']
+    )
+    db.session.add(new_progress)
+    db.session.commit()
+    return redirect(url_for('plan_progress', detail_id=detail_id))  # 修复重定向参数
+
+@app.route('/review_plan_progress/<int:progress_id>/<action>')
+def review_plan_progress(progress_id, action):
+    if 'user' not in session or not session.get('is_admin'):
+        return redirect('/')
+    
+    progress = PlanProgressRecord.query.get(progress_id)
+    progress.status = '已通过' if action == 'approve' else '已驳回'
+    progress.reviewer = session['user']
+    db.session.commit()
+    return redirect(url_for('plan_progress', detail_id=progress.detail_id))
+
+@app.route('/plan_progress/<int:detail_id>')  # 确保路由参数与模板中的URL生成一致
+def plan_progress(detail_id):
+    if 'user' not in session:
+        return redirect('/')
+    
+    detail = ProjectPlanDetail.query.get_or_404(detail_id)
+    progress_records = PlanProgressRecord.query.filter_by(detail_id=detail_id).order_by(PlanProgressRecord.submit_time.desc()).all()
+    
+    current_user = User.query.filter_by(username=session['user']).first()
+    cooperating_persons = [cp.strip() for cp in detail.cooperating_persons.split(',')] if detail.cooperating_persons else []
+    has_access = (
+        current_user.username == detail.responsible_person or
+        current_user.username in cooperating_persons
+    )
+    
+    return render_template('plan_progress.html',
+                         detail=detail,
+                         progress_records=progress_records,
+                         is_admin=current_user.is_admin,
+                         is_company_leader=current_user.is_company_leader,
+                         has_access=has_access,
+                         current_user=current_user)
+
+@app.route('/weekly_management')
+def weekly_management():
+    if 'user' not in session:
+        return redirect('/')
+    return render_template('weekly_management.html')
+
+@app.route('/historical_weekly')
+def historical_weekly():
+    if 'user' not in session:
+        return redirect('/')
+    
+    current_user = User.query.filter_by(username=session['user']).first()
+    page = request.args.get('page', 1, type=int)
+    pagination = HistoricalWeeklyReport.query.order_by(
+        HistoricalWeeklyReport.page.desc()
+    ).paginate(page=page, per_page=1)
+    
+    reports = []
+    archive_time = None  # 新增归档时间变量
+    if pagination.items:
+        content = json.loads(pagination.items[0].content)
+        # 获取归档时间
+        archive_time = datetime.fromisoformat(content['archive_time']).strftime('%Y-%m-%d %H:%M')
+        departments = sorted(set(r['department'] for r in content['reports']))
+        for dept in departments:
+            dept_reports = [r for r in content['reports'] if r['department'] == dept]
+            users = User.query.filter(User.username.in_([r['username'] for r in dept_reports])).all()
+            sorted_users = sorted(users, key=lambda u: not u.is_department_head)
+            reports.extend([
+                {
+                    'department': u.department,
+                    'username': u.username,
+                    'current_work': next(r for r in dept_reports if r['username'] == u.username)['current_work'],
+                    'next_plan': next(r for r in dept_reports if r['username'] == u.username)['next_plan'],
+                    'submit_time': next(r for r in dept_reports if r['username'] == u.username).get('submit_time')
+                }
+                for u in sorted_users
+            ])
+    
+    return render_template('historical_weekly.html',
+                         reports=reports,
+                         pagination=pagination,
+                         current_user=current_user,
+                         archive_time=archive_time) 
+
+@app.route('/delete_historical_weekly/<int:page_id>', methods=['POST'])
+def delete_historical_weekly(page_id):
+    if 'user' not in session or not session.get('is_admin'):
+        return redirect('/')
+    
+    report = HistoricalWeeklyReport.query.filter_by(page=page_id).first()
+    if report:
+        db.session.delete(report)
+        db.session.commit()
+        flash('历史周报删除成功', 'success')
+    else:
+        flash('周报记录不存在', 'error')
+    
+    return redirect(url_for('historical_weekly'))
+
+
+@app.route('/personal_weekly', methods=['GET', 'POST'])
+def personal_weekly():
+    if 'user' not in session:
+        return redirect('/')
+    
+    user = User.query.filter_by(username=session['user']).first()
+    template = PersonalWeeklyTemplate.query.first()
+    
+    users = User.query.filter_by(is_company_leader=False).order_by(
+        User.department,
+        User.is_department_head.desc(),
+        User.username
+    ).all()
+    
+    current_reports = {r.user_id: r for r in PersonalWeeklyReport.query.filter_by(archived=False)}
+    
+    if request.method == 'POST':
+        if user.is_company_info or user.is_general_dept_head:
+            current_work = request.form.get('current_work', '')
+            next_plan = request.form.get('next_plan', '')
+            
+            if template is None:
+                template = PersonalWeeklyTemplate(
+                    current_work=current_work,
+                    next_plan=next_plan
+                )
+                db.session.add(template)
+            else:
+                template.current_work = current_work
+                template.next_plan = next_plan
+            db.session.commit()
+            flash('模板保存成功', 'success')
+        
+        # 处理周报提交
+        for u in users:
+            if f'submit_{u.id}' in request.form:
+                report = current_reports.get(u.id)
+                
+                # 创建或更新报告
+                if not report:
+                    report = PersonalWeeklyReport(
+                        user_id=u.id,
+                        current_work=request.form.get(f'current_work_{u.id}', ''),
+                        next_plan=request.form.get(f'next_plan_{u.id}', '')
+                    )
+                    db.session.add(report)
+                else:
+                    # 修改权限判断逻辑
+                    if check_permission(user, u) or u.id == user.id:
+                        report.current_work = request.form.get(f'current_work_{u.id}', '')
+                        report.next_plan = request.form.get(f'next_plan_{u.id}', '')
+
+                if u.id == user.id and not report.submitted: 
+                    report.submitted = True
+                    report.submit_time = datetime.utcnow()
+                elif (user.is_department_head or user.is_department_info) and user.department == u.department:
+                    report.department_submitted = True
+                    report.submit_time = datetime.utcnow() 
+                
+                try:
+                    db.session.commit()
+                except Exception as e:
+                    db.session.rollback()
+                    flash(f'提交失败: {str(e)}', 'error')
+        
+        return redirect(url_for('personal_weekly'))
+    
+    show_archive_button = (user.is_company_info or user.is_general_dept_head)
+    return render_template('personal_weekly.html',
+                        users=users,
+                        current_reports=current_reports,
+                        template=template,
+                        user=user,
+                        show_archive_button=show_archive_button)
+
+@app.route('/archive_weekly', methods=['POST'])
+def archive_weekly():
+    if 'user' not in session:
+        return redirect('/')
+    
+    user = User.query.filter_by(username=session['user']).first()
+    if not (user.is_company_info or user.is_general_dept_head):
+        return "无操作权限", 403
+    
+    current_reports = PersonalWeeklyReport.query.filter_by(archived=False).all()
+    for report in current_reports:
+        report.archived = True
+        report.report_date = datetime.utcnow().date()
+    
+    history = HistoricalWeeklyReport(
+        content=json.dumps({
+            'reports': [
+                {
+                    'department': report.user.department,  # 修复这里，通过关系访问
+                    'username': report.user.username,    # 修复这里
+                    'current_work': report.current_work,
+                    'next_plan': report.next_plan,
+                    'submit_time': report.submit_time.isoformat() if report.submit_time else None
+                }
+                for report in current_reports
+            ],
+            'archive_time': datetime.utcnow().isoformat()
+        }),
+        page=HistoricalWeeklyReport.query.count() + 1
+    )
+    
+    db.session.add(history)
+    db.session.commit()
+    
+    return redirect('/historical_weekly')
+
+@app.route('/export_weekly')
+def export_weekly():
+    if 'user' not in session:
+        return redirect('/')
+    
+    current_date = datetime.now().date()
+    year, week_number, _ = current_date.isocalendar()
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    filename = f"个人周报_{year}年第{week_number}周_{timestamp}.xlsx"
+    
+    # 获取所有用户（排除公司领导），并按照部门排序
+    users = User.query.filter_by(is_company_leader=False).order_by(
+        User.department,
+        User.is_department_head.desc(),
+        User.username
+    ).all()
+    
+    data = []
+    for user in users:
+        # 查询用户最新的未归档周报
+        report = PersonalWeeklyReport.query.filter_by(
+            user_id=user.id,
+            archived=False
+        ).first()
+        
+        data.append({
+            '部门': user.department,
+            '姓名': user.username,
+            '本周工作内容': report.current_work if report else '',
+            '下周计划': report.next_plan if report else '',
+            '提交状态': '已提交' if report and report.submitted else '未提交',
+            '提交时间': report.submit_time.strftime('%Y-%m-%d %H:%M') if report and report.submit_time else ''
+        })
+    
+    df = pd.DataFrame(data)
+    
+    # 使用正确的Excel生成方式
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='个人周报')
+        worksheet = writer.sheets['个人周报']
+        worksheet.column_dimensions['A'].width = 20
+        worksheet.column_dimensions['B'].width = 15
+        worksheet.column_dimensions['C'].width = 50
+        worksheet.column_dimensions['D'].width = 50
+    
+    output.seek(0)
+    
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        download_name=filename,
+        as_attachment=True
+    )
+
+@app.route('/company_weekly', methods=['GET', 'POST'])
+def company_weekly():
+    if 'user' not in session:
+        return redirect('/')
+    
+    user = User.query.filter_by(username=session['user']).first()
+    departments = db.session.query(User.department).filter(
+        User.department != '领导'  # 添加过滤条件
+    ).distinct().all()
+    
+    # 获取当前未归档的周报
+    current_reports = CompanyWeeklyReport.query.filter_by(archived=False).all()
+    
+    if request.method == 'POST':
+        department = request.form['department']
+        report = CompanyWeeklyReport.query.filter_by(department=department, archived=False).first()
+        
+        if not report:
+            report = CompanyWeeklyReport(department=department)
+            db.session.add(report)
+        
+        # 权限检查
+        if check_company_write_permission(user, department):
+            report.current_work = request.form.get('current_work', '')
+            report.next_plan = request.form.get('next_plan', '')
+            
+            # 如果是部门用户首次提交
+            if user.department == department and not report.submitted:
+                report.submitted = True
+                report.submitter = user.username
+                report.submit_time = datetime.utcnow()
+            
+            db.session.commit()
+        
+        return redirect(url_for('company_weekly'))
+    
+    return render_template('company_weekly.html',
+                         current_reports=current_reports,
+                         user=user,
+                         departments=[d[0] for d in departments])
+
+def check_company_write_permission(user, department):
+    # 公司信息员和综合部负责人可随时修改
+    if user.is_company_info or user.is_general_dept_head:
+        return True
+    # 部门用户只能修改本部门未提交的
+    return user.department == department and not CompanyWeeklyReport.query.filter_by(
+        department=department, archived=False, submitted=True).first()
+
+@app.route('/archive_company_weekly', methods=['POST'])
+def archive_company_weekly():
+    if 'user' not in session:
+        return redirect('/')
+    
+    user = User.query.filter_by(username=session['user']).first()
+    if not (user.is_company_info or user.is_general_dept_head):
+        return "无操作权限", 403
+    
+    reports = CompanyWeeklyReport.query.filter_by(archived=False, submitted=True).all()
+    for report in reports:
+        report.archived = True
+        report.archive_time = datetime.utcnow()  # 修正为正确的字段名称
+    
+    db.session.commit()
+    return redirect(url_for('company_weekly'))
+
+@app.route('/company_weekly_history')
+def company_weekly_history():
+    if 'user' not in session:
+        return redirect('/')
+    
+    page = request.args.get('page', 1, type=int)
+    per_page = 10
+    
+    # 获取所有归档时间点（按归档时间分组）
+    archive_query = db.session.query(
+        CompanyWeeklyReport.archive_time,
+        func.max(CompanyWeeklyReport.id).label('latest_id')
+    ).filter(
+        CompanyWeeklyReport.archived == True
+    ).group_by(
+        CompanyWeeklyReport.archive_time
+    ).order_by(
+        CompanyWeeklyReport.archive_time.desc()
+    )
+    
+    archives = archive_query.paginate(page=page, per_page=per_page, error_out=False)
+    
+    # 组织数据用于模板展示
+    archive_data = []
+    for item in archives.items:
+        # 获取该归档时间的所有周报
+        reports = CompanyWeeklyReport.query.filter(
+            CompanyWeeklyReport.archive_time == item.archive_time
+        ).order_by(CompanyWeeklyReport.department).all()
+        
+        archive_data.append({
+            'archive_time': item.archive_time,
+            'latest_id': item.latest_id,  # 用于删除操作的ID参数
+            'reports': reports
+        })
+    
+    return render_template('company_weekly_history.html', 
+                         archives=archives,
+                         archive_data=archive_data,
+                         is_admin=session.get('is_admin', False))
+
+@app.route('/delete_company_weekly_archive/<string:archive_time>')
+def delete_company_weekly_archive(archive_time):
+    if 'user' not in session or not session.get('is_admin'):
+        return redirect('/')
+    
+    try:
+        # 将URL参数中的字符串转换为datetime对象
+        archive_time = datetime.fromisoformat(archive_time)
+        # 删除所有该归档时间的记录
+        CompanyWeeklyReport.query.filter_by(archive_time=archive_time).delete()
+        db.session.commit()
+        flash('历史记录删除成功', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'删除失败: {str(e)}', 'error')
+    
+    return redirect(url_for('company_weekly_history'))
+
+@app.route('/export_company_weekly_archive/<string:archive_time>')
+def export_company_weekly_archive(archive_time):
+    if 'user' not in session:
+        return redirect('/')
+    
+    try:
+        archive_time = datetime.fromisoformat(archive_time)
+        reports = CompanyWeeklyReport.query.filter_by(archive_time=archive_time).all()
+        
+        data = [{
+            '部门': r.department,
+            '本周工作': r.current_work,
+            '下周计划': r.next_plan,
+            '提交时间': r.submit_time.strftime('%Y-%m-%d %H:%M'),
+            '归档时间': r.archive_time.strftime('%Y-%m-%d %H:%M')
+        } for r in reports]
+
+        df = pd.DataFrame(data)
+        filename = f"company_weekly_{archive_time.strftime('%Y%m%d_%H%M')}.xlsx"
+        
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='公司周报')
+        output.seek(0)
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            download_name=filename,
+            as_attachment=True
+        )
     except Exception as e:
         flash(f'导出失败: {str(e)}', 'error')
-        return redirect(url_for('finished_projects'))
-
-@app.route('/logout', methods=['POST'])
-def logout():
-    session.clear()
-    return redirect(url_for('login'))
-
-@app.route('/profile', methods=['GET', 'POST'])
-def profile():
-    current_datetime = datetime.datetime.now()
-    if 'user_id' not in session:
-        abort(401)
-
-    with get_db() as conn:
-        if request.method == 'POST':
-            new_password = request.form.get('password', '').strip()
-            if not new_password:
-                new_password = '123456'  # 设置初始密码
-            phone = request.form.get('phone', '').strip()
-
-            updates = []
-            params = []
-            if new_password:
-                updates.append("password = ?")
-                params.append(generate_password_hash(new_password))
-            if phone:
-                updates.append("phone = ?")
-                params.append(phone)
-
-            if updates:
-                params.append(session['user_id'])
-                query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
-                conn.execute(query, params)
-                conn.commit()
-                flash('个人信息修改成功，3秒后自动返回首页...', 'success')
-                return redirect(url_for('index'))
-
-        user = conn.execute(
-            "SELECT username, phone FROM users WHERE id=?",
-            (session['user_id'],)
-        ).fetchone()
-
-    return render_template('profile.html', user=user, current_datetime=current_datetime)
-
-@app.route('/add_project', methods=['GET', 'POST'])
-def add_project():
-    current_datetime = datetime.datetime.now()
-    if 'user_id' not in session or not session.get('is_admin'):
-        abort(403)
-
-    error = None
-    with get_db() as conn:
-        users = conn.execute("SELECT id, username FROM users").fetchall()
-        if request.method == 'POST':
-            try:
-                required_fields = [
-                    'category', 'project_name', 'main_work', 'work_goal',
-                    'completion_time', 'responsible_department'
-                ]
-                for field in required_fields:
-                    if not request.form.get(field, '').strip():
-                        raise ValueError(f"{field} 不能为空")
-
-                responsible_person_id = request.form.get('responsible_person_id')
-                responsible_leader_id = request.form.get('responsible_leader_id')
-                collaborator = request.form.get('collaborator', '').strip()
-
-                conn.execute('''
-                    INSERT INTO unfinished_projects (
-                        category, project_name, main_work, work_goal,
-                        completion_time, responsible_person_id, responsible_department,
-                        collaborator, collaborating_department, responsible_leader_id
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?)
-                ''', (
-                    request.form['category'],
-                    request.form['project_name'],
-                    request.form['main_work'],
-                    request.form['work_goal'],
-                    request.form['completion_time'],
-                    responsible_person_id,
-                    request.form['responsible_department'],
-                    collaborator,
-                    request.form.get('collaborating_department', ''),
-                    responsible_leader_id
-                ))
-                conn.commit()
-                return redirect(url_for('unfinished_projects'))
-
-            except Exception as e:
-                error = str(e)
-
-    return render_template('add_project.html', users=users, error=error)
-
-@app.route('/unfinished_projects', methods=['GET', 'POST'])
-def unfinished_projects():
-    current_datetime = datetime.datetime.now()
-    if 'user_id' not in session:
-        abort(401)
-
-    is_admin = session.get('is_admin', 0)
-    error = None
-    projects = []
-
-    with get_db() as conn:
-        try:
-            if request.method == 'POST':
-                if 'download_projects' in request.form:
-                    try:
-                        df = pd.read_sql_query("SELECT * FROM unfinished_projects", conn)
-                        
-                        buffer = io.BytesIO()
-                        with pd.ExcelWriter(buffer) as writer:
-                            df.to_excel(writer, index=False)
-                        buffer.seek(0)
-                        
-                        filename = request.form.get('filename', 'unfinished_projects').strip() or 'unfinished_projects'
-                        filename += '.xlsx'
-
-                        return send_file(
-                            buffer,
-                            as_attachment=True,
-                            download_name=filename,
-                            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                        )
-                    except Exception as e:
-                        flash(f'导出失败: {str(e)}', 'error')
-                        return redirect(url_for('unfinished_projects'))
-
-                if 'upload' in request.form:
-                    file = request.files['project_file']
-                    if file and file.filename.endswith('.xlsx'):
-                        filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
-                        file.save(filepath)
-                        flash(f'文件 {file.filename} 上传成功')
-                
-                if is_admin:
-                    if 'delete_project' in request.form:
-                        project_id = request.form.get('project_id')
-                        if project_id:
-                            conn.execute("DELETE FROM unfinished_projects WHERE id=?", (project_id,))
-                            conn.commit()
-                            flash('项目删除成功', 'success')
-                            return redirect(url_for('unfinished_projects'))
-                    elif 'update_project' in request.form:
-                        project_id = request.form.get('project_id')
-                        fields = [
-                            'category', 'project_name', 'main_work', 'work_goal',
-                            'completion_time', 'responsible_department',
-                        ]
-                        params = [request.form.get(field, '').strip() for field in fields]
-                        responsible_person_id = request.form.get('responsible_person_id')
-                        collaborator = request.form.get('collaborator', '').strip()
-                        responsible_leader_id = request.form.get('responsible_leader_id')
-                        is_finished = 1 if request.form.get('is_finished') == '1' else 0
-                        params.extend([
-                            responsible_person_id,
-                            collaborator,
-                            responsible_leader_id,
-                            request.form.get('collaborating_department', '').strip(),
-                            is_finished,
-                            project_id
-                        ])
-                        conn.execute('''
-                            UPDATE unfinished_projects SET
-                            category=?, project_name=?, main_work=?, work_goal=?,
-                            completion_time=?, responsible_department=?,
-                            responsible_person_id=?, collaborator=?, responsible_leader_id=?,
-                            collaborating_department=?, is_finished=?
-                            WHERE id=?
-                        ''', params)
-                        conn.commit()
-                        if is_finished:
-                            project = conn.execute(
-                                "SELECT * FROM unfinished_projects WHERE id=?", 
-                                (project_id,)
-                            ).fetchone()
-                            if project:
-                                status_fields = [project[i] for i in range(12, 22)]
-                                conn.execute('''
-                                    INSERT INTO finished_projects (
-                                        original_id, category, project_name, main_work,
-                                        work_goal, completion_time, responsible_person_id,
-                                        responsible_department, collaborator,
-                                        collaborating_department, responsible_leader_id,
-                                        completion_status_1, completion_status_2, completion_status_3,
-                                        completion_status_4, completion_status_5, completion_status_6,
-                                        completion_status_7, completion_status_8, completion_status_9,
-                                        completion_status_10, completion_time_finished
-                                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                                ''', (
-                                    project_id, project[1], project[2], project[3],
-                                    project[4], project[5], project[6], project[7],
-                                    project[8], project[9], project[10],
-                                    status_fields[0], status_fields[1], status_fields[2],
-                                    status_fields[3], status_fields[4], status_fields[5],
-                                    status_fields[6], status_fields[7], status_fields[8],
-                                    status_fields[9], datetime.datetime.now().strftime('%Y-%m-%d')
-                                ))
-                                conn.execute("DELETE FROM unfinished_projects WHERE id=?", (project_id,))
-                                conn.commit()
-                                flash('项目已标记为完成', 'success')
-                                return redirect(url_for('unfinished_projects'))
-                    elif 'upload_projects' in request.form:
-                        try:
-                            if 'file' not in request.files:
-                                flash('请选择文件', 'error')
-                                return redirect(request.url)
-                            
-                            file = request.files['file']
-                            if file.filename == '':
-                                flash('没有选择文件', 'error')
-                                return redirect(request.url)
-
-                            if not file.filename.lower().endswith(('.xlsx', '.xls')):
-                                flash('仅支持Excel文件（.xlsx/.xls）', 'error')
-                                return redirect(request.url)
-
-                            df = pd.read_excel(file, engine='openpyxl')
-                            required_columns = [
-                                'category', 'project_name', 'main_work', 
-                                'work_goal', 'completion_time', 
-                                'responsible_department'
-                            ]
-                            if not all(col in df.columns for col in required_columns):
-                                missing = set(required_columns) - set(df.columns)
-                                flash(f'缺少必要列：{", ".join(missing)}', 'error')
-                                return redirect(request.url)
-                            
-                            existing = pd.read_sql_query(
-                                "SELECT category, project_name, main_work, work_goal FROM unfinished_projects",
-                                conn
-                            )
-                            
-                            duplicates = []
-                            valid_rows = []
-                            
-                            for _, row in df.iterrows():
-                                key = (
-                                    row['category'],
-                                    row['project_name'],
-                                    row['main_work'],
-                                    row['work_goal']
-                                )
-                                if key in existing.itertuples(index=False, name=None):
-                                    duplicates.append(row['project_name'])
-                                else:
-                                    valid_rows.append(row)
-                            
-                            if valid_rows:
-                                clean_df = pd.DataFrame(valid_rows)
-                                clean_df.to_sql(
-                                    'unfinished_projects', 
-                                    conn, 
-                                    if_exists='append', 
-                                    index=False
-                                )
-                                conn.commit()
-                            
-                            if duplicates:
-                                dup_list = ', '.join(set(duplicates[:5])) 
-                                flash(f"跳过 {len(duplicates)} 个重复项目（示例：{dup_list}...）", 'warning')
-                            else:
-                                flash(f'成功导入 {len(valid_rows)} 条数据', 'success')
-                            
-                        except Exception as e:
-                            flash(f'导入失败: {str(e)}', 'error')
-
-            projects = conn.execute('''
-                SELECT 
-                    up.id,
-                    up.category,
-                    up.project_name,
-                    up.main_work,
-                    up.work_goal,
-                    up.completion_time,
-                    u1.username AS responsible_person,
-                    up.responsible_department,
-                    up.collaborator,
-                    up.collaborating_department,
-                    u3.username AS responsible_leader,
-                    (CASE WHEN julianday(up.completion_time) < julianday('now') 
-                        THEN '逾期' ELSE '进行中' END) AS status
-                FROM unfinished_projects up
-                LEFT JOIN users u1 ON up.responsible_person_id = u1.id
-                LEFT JOIN users u3 ON up.responsible_leader_id = u3.id
-                ORDER BY up.category, up.project_name
-            ''').fetchall()
-
-        except Exception as e:
-            error = str(e)
-            flash(f'操作失败: {str(e)}', 'error')
-
-    return render_template('unfinished_projects.html',
-                         projects=projects,
-                         error=error,
-                         is_admin=is_admin,
-                         current_date=current_datetime.strftime('%Y-%m-%d'))
-                         
-@app.route('/project_detail/<int:project_id>', methods=['GET', 'POST'])
-def project_detail(project_id):
-    current_datetime = datetime.datetime.now()
-    if 'user_id' not in session:
-        abort(401)
-
-    is_admin = session.get('is_admin', 0)
-    error = None
-    with get_db() as conn:
-        try:
-            project = conn.execute('''
-                SELECT 
-                    up.*, 
-                    u1.username AS responsible_person_name, 
-                    u3.username AS responsible_leader_name,
-                    fp.final_summary,
-                    fp.summary_status,
-                    fp.review_comment,
-                    fp.summary_submitted_at,
-                    fp.summary_reviewed_at,
-                    up.is_finished
-                FROM unfinished_projects up
-                LEFT JOIN finished_projects fp ON up.id = fp.original_id
-                LEFT JOIN users u1 ON up.responsible_person_id = u1.id
-                LEFT JOIN users u3 ON up.responsible_leader_id = u3.id
-                WHERE up.id = ?
-            ''', (project_id,)).fetchone()
-
-            if not project:
-                abort(404)
-
-            is_responsible = session['user_id'] == project['responsible_person_id']
-            can_edit_summary = is_responsible and project['is_finished']
-            can_review = is_admin and project['summary_status'] == 'pending'
-
-            completion_time = datetime.datetime.strptime(project['completion_time'], "%Y-%m-%d").date()
-            current_date = current_datetime.date()
-            is_finished = project['is_finished']
-            status = '已完成' if is_finished else '逾期' if completion_time < current_date else '进行中'
-
-            completion_statuses = []
-            for i in range(1, 11):
-                status_text = project[f'completion_status_{i}'] if project[f'completion_status_{i}'] else '无'
-                completion_statuses.append(status_text)
-
-            if request.method == 'POST':
-                if 'submit_progress' in request.form and is_responsible and not is_finished:
-                    progress = request.form.get('progress', '').strip()
-                    if progress:
-                        date = request.form.get('date') or current_datetime.strftime('%Y-%m-%d')
-                        progress_with_date = f"{progress} ({date})"
-                        for i in range(1, 11):
-                            if not project[f'completion_status_{i}']:
-                                conn.execute(
-                                    f"UPDATE unfinished_projects SET completion_status_{i}=? WHERE id=?",
-                                    (progress_with_date, project_id)
-                                )
-                                conn.commit()
-                                flash('进度提交成功', 'success')
-                                break
-                        else:
-                            flash('所有进度位已填满', 'warning')
-                    return redirect(url_for('project_detail', project_id=project_id))
-
-                if 'submit_history' in request.form and is_responsible and not is_finished:
-                    history_date = request.form.get('history_date', '')
-                    history_progress = request.form.get('history_progress', '').strip()
-                    if history_date and history_progress:
-                        progress_with_date = f"{history_progress} ({history_date})"
-                        for i in range(1, 11):
-                            if not project[f'completion_status_{i}']:
-                                conn.execute(
-                                    f"UPDATE unfinished_projects SET completion_status_{i}=? WHERE id=?",
-                                    (progress_with_date, project_id)
-                                )
-                                conn.commit()
-                                flash('历史进度补录成功', 'success')
-                                break
-                        else:
-                            flash('所有进度位已填满', 'warning')
-                    return redirect(url_for('project_detail', project_id=project_id))
-
-                if ('approve_progress' in request.form or 'reject_progress' in request.form) and is_admin:
-                    progress_index = request.form.get('progress_index')
-                    comment = request.form.get(f'comment_{progress_index}', '').strip()
-                    original_status = project[f'completion_status_{progress_index}']
-                    
-                    new_status = original_status
-                    if 'approve_progress' in request.form:
-                        new_status = f"[审核通过] {original_status}"
-                        if comment:
-                            new_status += f"（备注：{comment}）"
-                    elif 'reject_progress' in request.form:
-                        new_status = f"[已驳回] {original_status}"
-                        if comment:
-                            new_status += f"（原因：{comment}）"
-                        
-                    conn.execute(
-                        f"UPDATE unfinished_projects SET completion_status_{progress_index}=? WHERE id=?",
-                        (new_status, project_id)
-                    )
-                    conn.commit()
-                    flash('进度审核操作成功', 'success')
-                    return redirect(url_for('project_detail', project_id=project_id))
-
-                if 'submit_summary' in request.form and can_edit_summary:
-                    summary = request.form.get('final_summary', '').strip()
-                    if summary:
-                        conn.execute('''
-                            INSERT OR REPLACE INTO finished_projects (
-                                original_id, final_summary, summary_status, 
-                                summary_submitted_at
-                            ) VALUES (?, ?, 'pending', CURRENT_TIMESTAMP)
-                        ''', (project_id, summary))
-                        conn.commit()
-                        flash('总结已提交，等待审核', 'success')
-                    else:
-                        flash('总结内容不能为空', 'error')
-                    return redirect(url_for('project_detail', project_id=project_id))
-
-                if 'review_summary' in request.form and can_review:
-                    action = request.form.get('review_action')
-                    comment = request.form.get('review_comment', '').strip()
-                    
-                    if action == 'reject' and not comment:
-                        flash('驳回必须填写意见', 'error')
-                        return redirect(url_for('project_detail', project_id=project_id))
-                    
-                    new_status = 'approved' if action == 'approve' else 'rejected'
-                    conn.execute('''
-                        UPDATE finished_projects SET 
-                            summary_status = ?,
-                            review_comment = ?,
-                            summary_reviewed_at = CURRENT_TIMESTAMP
-                        WHERE original_id = ?
-                    ''', (new_status, comment, project_id))
-                    conn.commit()
-                    flash(f'总结已{"通过" if action == "approve" else "驳回"}', 'success')
-                    return redirect(url_for('project_detail', project_id=project_id))
-
-            project_data = {
-                'id': project['id'],
-                'category': project['category'],
-                'project_name': project['project_name'],
-                'main_work': project['main_work'],
-                'work_goal': project['work_goal'],
-                'completion_time': format_datetime(project['completion_time']),
-                'responsible_person_id': project['responsible_person_id'], 
-                'responsible_person': project['responsible_person_name'],
-                'responsible_department': project['responsible_department'],
-                'collaborator': project['collaborator'],
-                'collaborating_department': project['collaborating_department'],
-                'responsible_leader': project['responsible_leader_name'],
-                'status': status,
-                'is_finished': is_finished,
-                'final_summary': project['final_summary'],
-                'summary_status': project['summary_status'],
-                'review_comment': project['review_comment'],
-                'summary_submitted_at': format_datetime(project['summary_submitted_at']),
-                'summary_reviewed_at': format_datetime(project['summary_reviewed_at'])
-            }
-
-        except sqlite3.Error as e:
-            flash(f'数据库错误: {str(e)}', 'error')
-            return redirect(url_for('unfinished_projects'))
-        except ValueError as e:
-            flash(f'日期格式错误: {str(e)}', 'error')
-            return redirect(url_for('unfinished_projects'))
-
-    return render_template('project_detail.html',
-                           project=project_data,
-                           status=status,
-                           completion_statuses=completion_statuses,
-                           responsible_person_name=project['responsible_person_name'],
-                           is_admin=is_admin,
-                           current_date=current_datetime.strftime('%Y-%m-%d'),
-                           status_labels={
-                               'pending': ('待审核', 'warning'),
-                               'approved': ('已通过', 'success'),
-                               'rejected': ('已驳回', 'danger')
-                           })
-
-@app.route('/edit_project/<int:project_id>', methods=['GET', 'POST'])
-def edit_project(project_id):
-    current_datetime = datetime.datetime.now()
-    if 'user_id' not in session or not session.get('is_admin'):
-        abort(403)
-
-    with get_db() as conn:
-        project = conn.execute('''
-            SELECT 
-                up.*,
-                u1.username AS responsible_person_name,
-                u3.username AS responsible_leader_name,
-                (CASE WHEN julianday(up.completion_time) < julianday('now') 
-                      THEN '逾期' ELSE '进行中' END) AS status
-            FROM unfinished_projects up
-            LEFT JOIN users u1 ON up.responsible_person_id = u1.id
-            LEFT JOIN users u3 ON up.responsible_leader_id = u3.id
-            WHERE up.id = ?
-        ''', (project_id,)).fetchone()
-
-        if not project:
-            abort(404)
-
-        users = conn.execute("SELECT id, username FROM users").fetchall()
-
-        if request.method == 'POST':
-            try:
-                update_data = [
-                    request.form['category'],
-                    request.form['project_name'],
-                    request.form['main_work'],
-                    request.form['work_goal'],
-                    request.form['completion_time'],
-                    request.form['responsible_department'],
-                    request.form.get('responsible_person_id'),
-                    request.form.get('collaborator', ''),
-                    request.form.get('collaborating_department', ''),
-                    request.form.get('responsible_leader_id'),
-                    *[request.form.get(f'completion_status_{i}', '') for i in range(1, 11)],
-                    project_id
-                ]
-
-                conn.execute('''
-                    UPDATE unfinished_projects SET
-                        category = ?,
-                        project_name = ?,
-                        main_work = ?,
-                        work_goal = ?,
-                        completion_time = ?,
-                        responsible_department = ?,
-                        responsible_person_id = ?,
-                        collaborator = ?,
-                        collaborating_department = ?,
-                        responsible_leader_id = ?,
-                        completion_status_1 = ?,
-                        completion_status_2 = ?,
-                        completion_status_3 = ?,
-                        completion_status_4 = ?,
-                        completion_status_5 = ?,
-                        completion_status_6 = ?,
-                        completion_status_7 = ?,
-                        completion_status_8 = ?,
-                        completion_status_9 = ?,
-                        completion_status_10 = ?
-                    WHERE id = ?
-                ''', update_data)
-                conn.commit()
-                flash('项目更新成功', 'success')
-                return redirect(url_for('unfinished_projects'))
-
-            except sqlite3.IntegrityError as e:
-                flash(f'数据库完整性错误: {str(e)}', 'error')
-            except Exception as e:
-                flash(f'更新失败: {str(e)}', 'error')
-
-    project_data = dict(project)
-    return render_template('edit_project.html',
-                         project=project_data,
-                         users=users,
-                         current_datetime=current_datetime)
-
-@app.route('/mark_project_finished/<int:project_id>', methods=['POST'])
-def mark_project_finished(project_id):
-    if 'user_id' not in session or not session.get('is_admin'):
-        abort(403)
-
-    current_datetime = datetime.datetime.now()
-    try:
-        with get_db() as conn:
-            project = conn.execute(
-                "SELECT * FROM unfinished_projects WHERE id = ?",
-                (project_id,)
-            ).fetchone()
-
-            if not project:
-                flash('项目不存在或已被处理', 'error')
-                return redirect(url_for('unfinished_projects'))
-
-            status_fields = [project[f'completion_status_{i}'] for i in range(1, 11)]
-
-            conn.execute('''
-                INSERT INTO finished_projects (
-                    original_id,
-                    category,
-                    project_name,
-                    main_work,
-                    work_goal,
-                    completion_time,
-                    responsible_person_id,
-                    responsible_department,
-                    collaborator,
-                    collaborating_department,
-                    responsible_leader_id,
-                    completion_status_1,
-                    completion_status_2,
-                    completion_status_3,
-                    completion_status_4,
-                    completion_status_5,
-                    completion_status_6,
-                    completion_status_7,
-                    completion_status_8,
-                    completion_status_9,
-                    completion_status_10,
-                    completion_time_finished
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            ''', (
-                project_id,
-                project['category'],
-                project['project_name'],
-                project['main_work'],
-                project['work_goal'],
-                project['completion_time'],
-                project['responsible_person_id'],
-                project['responsible_department'],
-                project['collaborator'] or '',  # 修复点：直接访问字段并用or处理None值
-                project['collaborating_department'] or '',  # 修复点：同上
-                project['responsible_leader_id'],
-                *status_fields,
-                current_datetime.strftime('%Y-%m-%d')
-            ))
-
-            conn.execute("DELETE FROM unfinished_projects WHERE id = ?", (project_id,))
-            conn.commit()
-            flash(f'项目 "{project["project_name"]}" 已成功标记为完成', 'success')
-    except sqlite3.Error as e:
-        app.logger.error(f"数据库错误: {str(e)}")
-        flash(f'数据库错误: {str(e)}', 'error')
-    except Exception as e:
-        app.logger.error(f"标记完成失败: {str(e)}")
-        flash(f'标记完成失败: {str(e)}', 'error')
-
-    return redirect(url_for('unfinished_projects'))
-
-@app.route('/finished_projects', methods=['GET', 'POST'])
-def finished_projects():
-    current_datetime = datetime.datetime.now()
-    if 'user_id' not in session:
-        flash('请先登录以访问该页面', 'warning')
-        return redirect(url_for('login', next=request.url))
-
-    is_admin = session.get('is_admin', 0)
-    error = None
-    all_entries_sorted = []
-
-    with get_db() as conn:
-        try:
-            # 获取原始项目数据
-            raw_projects = conn.execute('''
-                SELECT 
-                    fp.id AS project_id,
-                    fp.category,
-                    fp.project_name,
-                    fp.main_work,
-                    fp.work_goal,
-                    fp.completion_time AS plan_date,
-                    u1.username AS responsible_person,
-                    fp.responsible_department,
-                    fp.collaborator,
-                    fp.collaborating_department,
-                    u3.username AS responsible_leader,
-                    fp.completion_time_finished,
-                    CASE 
-                        WHEN fp.completion_time_finished > fp.completion_time 
-                            THEN '逾期' 
-                        ELSE '正常' 
-                    END AS status
-                FROM finished_projects fp
-                LEFT JOIN users u1 ON fp.responsible_person_id = u1.id
-                LEFT JOIN users u3 ON fp.responsible_leader_id = u3.id
-                ORDER BY fp.category, fp.project_name, fp.main_work
-            ''').fetchall()
-
-            # 预处理数据：添加合并信息
-            work_groups = {}
-            for idx, entry in enumerate(raw_projects):
-                work_key = (entry['category'], entry['project_name'], entry['main_work'])
-                work_groups.setdefault(work_key, []).append(idx)
-
-            # 转换字典为列表并添加rowspan信息
-            all_entries_sorted = [dict(entry) for entry in raw_projects]
-            for work_key, indices in work_groups.items():
-                first_entry = all_entries_sorted[indices[0]]
-                first_entry['main_work_rowspan'] = len(indices)
-                for i in indices[1:]:
-                    all_entries_sorted[i]['main_work_rowspan'] = 0
-
-            # 添加类别合并信息
-            current_category = None
-            category_start = 0
-            for idx, entry in enumerate(all_entries_sorted):
-                if entry['category'] != current_category:
-                    if current_category is not None:
-                        for i in range(category_start, idx):
-                            all_entries_sorted[i]['category_rowspan'] = idx - category_start
-                    current_category = entry['category']
-                    category_start = idx
-            # 处理最后一个类别
-            if current_category is not None:
-                for i in range(category_start, len(all_entries_sorted)):
-                    all_entries_sorted[i]['category_rowspan'] = len(all_entries_sorted) - category_start
-
-        except sqlite3.OperationalError as e:
-            flash(f'数据库操作错误: {str(e)}', 'error')
-            return redirect(url_for('index'))
-        except Exception as e:
-            flash(f'数据加载失败: {str(e)}', 'error')
-            return redirect(url_for('index'))
-
-    return render_template('finished_projects.html',
-                         all_entries_sorted=all_entries_sorted,
-                         is_admin=is_admin,
-                         current_datetime=current_datetime)
-
-@app.route('/delete_finished_project/<int:project_id>', methods=['POST'])
-@admin_required
-def delete_finished_project(project_id):
-    if request.method == 'POST':
-        try:
-            with get_db() as conn:
-                # 检查项目是否存在
-                project = conn.execute(
-                    "SELECT id FROM finished_projects WHERE id = ?", 
-                    (project_id,)
-                ).fetchone()
-                
-                if not project:
-                    flash('项目不存在或已被删除', 'error')
-                    return redirect(url_for('finished_projects'))
-
-                # 执行删除操作
-                conn.execute(
-                    'DELETE FROM finished_projects WHERE id = ?', 
-                    (project_id,)
-                )
-                conn.commit()
-                flash('已完成项目删除成功', 'success')
-        except sqlite3.Error as e:
-            flash(f'数据库错误: {str(e)}', 'error')
-            app.logger.error(f"删除已完成项目失败: {str(e)}")
-        except Exception as e:
-            flash(f'删除失败: {str(e)}', 'error')
-            app.logger.error(f"删除异常: {str(e)}")
-    
-    return redirect(url_for('finished_projects'))
-
-@app.route('/finished_project_detail/<int:project_id>', methods=['GET', 'POST'])
-def finished_project_detail(project_id):
-    current_datetime = datetime.datetime.now()
-    if 'user_id' not in session:
-        abort(401)
-
-    is_admin = session.get('is_admin', 0)
-    error = None
-    with get_db() as conn:
-        try:
-            project = conn.execute('''
-                SELECT 
-                    fp.id,
-                    fp.category,
-                    fp.project_name,
-                    fp.main_work,
-                    fp.work_goal,
-                    fp.completion_time AS original_completion_time,
-                    fp.responsible_person_id,
-                    fp.responsible_department,
-                    fp.collaborator,
-                    fp.collaborating_department,
-                    fp.responsible_leader_id,
-                    fp.completion_time_finished,
-                    fp.final_summary,
-                    fp.summary_status,
-                    fp.summary_submitted_at,
-                    fp.summary_reviewed_at,
-                    fp.review_comment,
-                    u1.username AS responsible_person,
-                    u3.username AS responsible_leader,
-                    up.completion_status_1,
-                    up.completion_status_2,
-                    up.completion_status_3,
-                    up.completion_status_4,
-                    up.completion_status_5,
-                    up.completion_status_6,
-                    up.completion_status_7,
-                    up.completion_status_8,
-                    up.completion_status_9,
-                    up.completion_status_10
-                FROM finished_projects fp
-                LEFT JOIN users u1 ON fp.responsible_person_id = u1.id
-                LEFT JOIN users u3 ON fp.responsible_leader_id = u3.id
-                LEFT JOIN unfinished_projects up ON fp.original_id = up.id
-                WHERE fp.id = ?
-            ''', (project_id,)).fetchone()
-
-            if not project:
-                abort(404)
-
-            is_responsible = session['user_id'] == project['responsible_person_id']
-            can_edit_summary = is_responsible and project['summary_status'] in (None, 'rejected')
-            can_review = is_admin and project['summary_status'] == 'pending'
-
-            completion_statuses = []
-            for i in range(1, 11):
-                status = project[f'completion_status_{i}']
-                completion_statuses.append(status if status is not None else "未记录")
-
-            try:
-                completion_date = datetime.datetime.strptime(
-                    project['completion_time_finished'], "%Y-%m-%d"
-                ).date() if project['completion_time_finished'] else None
-            except (ValueError, TypeError):
-                completion_date = None
-                
-            current_date = current_datetime.date()
-            days_diff = (current_date - completion_date).days if completion_date else 0
-
-            if request.method == 'POST':
-                if 'submit_summary' in request.form and can_edit_summary:
-                    summary = request.form.get('final_summary', '').strip()
-                    if summary:
-                        conn.execute('''
-                            UPDATE finished_projects SET
-                                final_summary = ?,
-                                summary_status = 'pending',
-                                summary_submitted_at = CURRENT_TIMESTAMP,
-                                review_comment = NULL
-                            WHERE id = ?
-                        ''', (summary, project_id))
-                        conn.commit()
-                        flash('总结已提交，等待审核', 'success')
-                    else:
-                        flash('总结内容不能为空', 'error')
-                    return redirect(url_for('finished_project_detail', project_id=project_id))
-
-                if 'review_summary' in request.form and can_review:
-                    action = request.form.get('review_result')
-                    comment = request.form.get('review_comment', '').strip()
-                    
-                    if action not in ['approved', 'rejected']:
-                        flash('无效的审核操作', 'error')
-                        return redirect(url_for('finished_project_detail', project_id=project_id))
-                    
-                    if action == 'rejected' and not comment:
-                        flash('驳回必须填写审核意见', 'error')
-                        return redirect(url_for('finished_project_detail', project_id=project_id))
-                    
-                    conn.execute('''
-                        UPDATE finished_projects 
-                        SET summary_status = ?,
-                            review_comment = ?,
-                            summary_reviewed_at = CURRENT_TIMESTAMP
-                        WHERE id = ?
-                    ''', (action, comment if action == 'rejected' else None, project_id))
-                    conn.commit()
-                    flash(f'总结已{"通过" if action == "approved" else "驳回"}', 'success')
-                    return redirect(url_for('finished_project_detail', project_id=project_id))
-
-            project_data = {
-                'id': project['id'],
-                'category': project['category'],
-                'project_name': project['project_name'],
-                'main_work': project['main_work'],
-                'work_goal': project['work_goal'],
-                'original_completion_time': format_datetime(project['original_completion_time']),
-                'responsible_person': project['responsible_person'],
-                'responsible_department': project['responsible_department'],
-                'collaborator': project['collaborator'],
-                'collaborating_department': project['collaborating_department'],
-                'responsible_leader': project['responsible_leader'],
-                'completion_time_finished': format_datetime(project['completion_time_finished']),
-                'final_summary': project['final_summary'],
-                'summary_status': project['summary_status'],
-                'review_comment': project['review_comment'],
-                'summary_submitted_at': format_datetime(project['summary_submitted_at']),
-                'summary_reviewed_at': format_datetime(project['summary_reviewed_at']),
-                'completion_statuses': completion_statuses,
-                'days_since_completion': days_diff,
-                'is_overdue': days_diff > 30 and project['summary_status'] != 'approved'
-            }
-
-        except sqlite3.Error as e:
-            flash(f'数据库错误: {str(e)}', 'error')
-            return redirect(url_for('finished_projects'))
-        except Exception as e:
-            flash(f'数据处理错误: {str(e)}', 'error')
-            return redirect(url_for('finished_projects'))
-
-    return render_template(
-        'finished_project_detail.html',
-        project=project_data,
-        is_admin=is_admin,
-        is_responsible=is_responsible,
-        can_edit_summary=can_edit_summary,
-        can_review=can_review,
-        current_datetime=current_datetime,
-        status_labels={
-            'pending': ('待审核', 'warning'),
-            'approved': ('已通过', 'success'),
-            'rejected': ('已驳回', 'danger')
-        },
-        overdue_warning=project_data['is_overdue']
-    )
-
-@app.route('/edit_finished_project/<int:project_id>', methods=['GET', 'POST'])
-def edit_finished_project(project_id):
-    if 'user_id' not in session or not session.get('is_admin'):
-        abort(403)
-
-    with get_db() as conn:
-        users = conn.execute("SELECT id, username FROM users").fetchall()
-        project = conn.execute('''
-            SELECT * FROM finished_projects 
-            WHERE id = ?
-        ''', (project_id,)).fetchone()
-
-        if not project:
-            abort(404)
-
-        if request.method == 'POST':
-            try:
-                update_data = [
-                    request.form['category'],
-                    request.form['project_name'],
-                    request.form['main_work'], 
-                    request.form['work_goal'],  
-                    project[5],
-                    request.form['responsible_department'],
-                    project[6],
-                    project[8],
-                    project[9],
-                    request.form.get('collaborating_department', '').strip(),
-                    request.form['completion_time_finished'],
-                    project_id
-                ]
-
-                conn.execute('''
-                    UPDATE finished_projects SET
-                        category = ?,
-                        project_name = ?,
-                        main_work = ?,
-                        work_goal = ?,
-                        completion_time = ?,
-                        responsible_department = ?,
-                        responsible_person_id = ?,
-                        collaborator = ?,
-                        responsible_leader_id = ?,
-                        collaborating_department = ?,
-                        completion_time_finished = ?
-                    WHERE id = ?
-                ''', update_data)
-                conn.commit()
-                flash('项目更新成功', 'success')
-                return redirect(url_for('finished_projects'))
-            except Exception as e:
-                flash(f'更新失败: {str(e)}', 'error')
-
-    return render_template('edit_finished_project.html',
-                           project=project,
-                           users=users,
-                           current_datetime=datetime.datetime.now())
-
-@app.route('/finished_projects/add', methods=['GET', 'POST'])
-@admin_required
-def add_finished_project():
-    current_datetime = datetime.datetime.now()
-    error = None
-    with get_db() as conn:
-        users = conn.execute("SELECT id, username FROM users").fetchall()
-        if request.method == 'POST':
-            try:
-                required_fields = [
-                    'category', 'project_name', 'main_work', 'work_goal',
-                    'responsible_department', 'completion_time_finished'
-                ]
-                for field in required_fields:
-                    if not request.form.get(field, '').strip():
-                        raise ValueError(f"{field.replace('_', ' ')} 不能为空")
-
-                form_data = {
-                    'category': request.form['category'],
-                    'project_name': request.form['project_name'],
-                    'main_work': request.form['main_work'],
-                    'work_goal': request.form['work_goal'],
-                    'responsible_person_id': request.form.get('responsible_person_id'),
-                    'responsible_department': request.form['responsible_department'],
-                    'collaborator': request.form.get('collaborator', ''),
-                    'collaborating_department': request.form.get('collaborating_department', ''),
-                    'responsible_leader_id': request.form.get('responsible_leader_id'),
-                    'completion_time_finished': request.form['completion_time_finished'],
-                    'completion_time': request.form.get('completion_time', '')
-                }
-
-                conn.execute('''
-                    INSERT INTO finished_projects (
-                        category, project_name, main_work, work_goal,
-                        responsible_person_id, responsible_department,
-                        collaborator, collaborating_department,
-                        responsible_leader_id, completion_time_finished,
-                        completion_time
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
-                ''', (
-                    form_data['category'],
-                    form_data['project_name'],
-                    form_data['main_work'],
-                    form_data['work_goal'],
-                    form_data['responsible_person_id'],
-                    form_data['responsible_department'],
-                    form_data['collaborator'],
-                    form_data['collaborating_department'],
-                    form_data['responsible_leader_id'],
-                    form_data['completion_time_finished'],
-                    form_data['completion_time']
-                ))
-                conn.commit()
-                flash('项目添加成功', 'success')
-                return redirect(url_for('finished_projects'))
-
-            except sqlite3.IntegrityError as e:
-                error = "数据库操作错误，请检查数据唯一性"
-            except Exception as e:
-                error = str(e)
-
-    return render_template('add_finished_project.html',
-                         users=users,
-                         error=error,
-                         current_datetime=current_datetime)
-
-@app.route('/all_projects', methods=['GET', 'POST'])
-def all_projects():
-    current_date = datetime.datetime.now().strftime('%Y-%m-%d')
-    
-    query_type = request.args.get('query_type', 'deadline')
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
-    page = request.args.get('page', 1, type=int)
-    per_page = 15
-
-    with get_db() as conn:
-        base_query = '''
-            SELECT 
-                up.id,
-                up.category,
-                up.project_name,
-                up.main_work,
-                up.work_goal,
-                up.completion_time AS plan_date,
-                u1.username AS responsible_person,
-                up.responsible_department,
-                up.collaborator,
-                up.collaborating_department,
-                u3.username AS responsible_leader,
-                CASE 
-                    WHEN julianday(up.completion_time) < julianday('now') THEN '逾期'
-                    ELSE '进行中' 
-                END AS status,
-                0 AS is_finished,
-                NULL AS completion_time_finished
-            FROM unfinished_projects up
-            LEFT JOIN users u1 ON up.responsible_person_id = u1.id
-            LEFT JOIN users u3 ON up.responsible_leader_id = u3.id
-            UNION ALL
-            SELECT 
-                fp.id,
-                fp.category,
-                fp.project_name,
-                fp.main_work,
-                fp.work_goal,
-                fp.completion_time AS plan_date,
-                u1.username AS responsible_person,
-                fp.responsible_department,
-                fp.collaborator,
-                fp.collaborating_department,
-                u3.username AS responsible_leader,
-                '已完成' AS status,
-                1 AS is_finished,
-                fp.completion_time_finished
-            FROM finished_projects fp
-            LEFT JOIN users u1 ON fp.responsible_person_id = u1.id
-            LEFT JOIN users u3 ON fp.responsible_leader_id = u3.id
-        '''
-
-        where_clauses = []
-        params = []
-        if start_date and end_date:
-            if query_type == 'deadline':
-                where_clauses.append("plan_date BETWEEN ? AND ?")
-                params.extend([start_date, end_date])
-            elif query_type == 'completion':
-                where_clauses.append("completion_time_finished BETWEEN ? AND ?")
-                params.extend([start_date, end_date])
-
-        full_query = base_query
-        if where_clauses:
-            full_query = f"SELECT * FROM ({base_query}) WHERE {' AND '.join(where_clauses)}"
-
-        pagination_query = f'''
-            SELECT * FROM ({full_query})
-            ORDER BY plan_date ASC 
-            LIMIT {per_page} OFFSET {(page - 1) * per_page}
-        '''
-        projects = conn.execute(pagination_query, params).fetchall()
-
-        count_query = f"SELECT COUNT(*) FROM ({full_query})"
-        total = conn.execute(count_query, params).fetchone()[0]
-
-        if request.method == 'POST' and 'export' in request.form:
-            try:
-                df = pd.read_sql_query(full_query, conn, params=params)
-                
-                buffer = io.BytesIO()
-                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                    df.to_excel(writer, index=False, 
-                              sheet_name='所有项目',
-                              columns=['category', 'project_name', 'main_work', 'work_goal',
-                                      'plan_date', 'responsible_person', 'responsible_department',
-                                      'collaborator', 'collaborating_department', 'responsible_leader',
-                                      'status', 'completion_time_finished'],
-                              header=['类别', '项目名称', '主要工作', '工作目标', 
-                                     '计划完成时间', '责任人', '责任部门',
-                                     '配合人', '配合部门', '责任领导', 
-                                     '状态', '实际完成时间'])
-                buffer.seek(0)
-                
-                return send_file(
-                    buffer,
-                    as_attachment=True,
-                    download_name=f'all_projects_export_{datetime.datetime.now().strftime("%Y%m%d%H%M")}.xlsx',
-                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                )
-            except Exception as e:
-                flash(f'导出失败: {str(e)}', 'error')
-                app.logger.error(f"导出错误: {str(e)}")
-
-    return render_template(
-        'all_projects.html',
-        all_projects=projects,
-        current_date=current_date,
-        query_type=query_type,
-        start_date=start_date,
-        end_date=end_date,
-        pagination={
-            'page': page,
-            'per_page': per_page,
-            'total': total,
-            'pages': (total // per_page) + (1 if total % per_page else 0)
-        }
-    )
-
-@app.route('/delete_project/<int:project_id>', methods=['POST'])
-def delete_project(project_id):
-    if request.method == 'POST':
-        try:
-            with get_db() as conn:
-                conn.execute('DELETE FROM unfinished_projects WHERE id = ?', (project_id,))
-                conn.commit()
-            flash('项目删除成功', 'success')
-            return redirect(url_for('unfinished_projects'))
-        except Exception as e:
-            flash(f'删除失败: {str(e)}', 'error')
-            return redirect(url_for('unfinished_projects'))
-
-@app.errorhandler(401)
-def unauthorized(error):
-    flash('会话已过期，请重新登录', 'warning')
-    return redirect(url_for('login', next=request.url)), 302
-
-@app.errorhandler(404)
-def not_found(error):
-    current_datetime = datetime.datetime.now()
-    return render_template('error.html', message="页面不存在", current_datetime=current_datetime), 404
-
-@app.teardown_appcontext
-def close_db(error):
-    if hasattr(g, '_database'):
-        g._database.close()
-
-@app.cli.command('init-db')
-def init_db_command():
-    """Initialize the database."""
-    with app.app_context():
-        db = get_db()
-        init_sqlite_schema(db)
-        print(f"Initialized SQLite database: {app.config['DATABASE']}")
+        return redirect(url_for('company_weekly_history'))
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+with app.app_context():
+    db.create_all()
+    if not User.query.filter_by(username='admin').first():
+        admin = User(username='admin', password='admin23gg', is_admin=True)
+        db.session.add(admin)
+        db.session.commit()
 
 if __name__ == '__main__':
-    with app.app_context():
-        try:
-            db = get_db()
-            print(f"数据库路径: {app.config['DATABASE']}")
-            print("数据库初始化完成")
-        except Exception as e:
-            print(f"数据库初始化失败: {str(e)}")
-            sys.exit(1)
-    
-    app.run(
-        host='0.0.0.0', 
-        port=5000,
-        debug=False
-    )
+    port = int(os.environ.get('FLASK_PORT', 5000))
+    host = os.environ.get('FLASK_HOST', '0.0.0.0')
+    app.run(host=host, port=port, debug=False)

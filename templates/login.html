@@ -1,154 +1,113 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html>
 <head>
-    <meta charset="UTF-8">
+    <title>登录</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 - 控股公司督办管理系统</title>
     <style>
         :root {
-            --mist-blue: #6C7A8B;         /* 莫兰迪蓝主色调 */
-            --morandi-orange: #D6A779;    /* 莫兰迪橙点缀色 */
-            --light-gray: #F0F4F8;         /* 浅灰背景 */
-            --deep-gray: #4A5568;          /* 深灰文字 */
-            --transition: all 0.3s ease;
+            --primary-blue: #5A7B9D;
+            --secondary-blue: #9DB4C8;
+            --accent-orange: #E57F6E;
+            --text-primary: #2C3E50;
+            --glass-effect: linear-gradient(145deg, rgba(255,255,255,0.95) 0%, rgba(245,245,245,0.98) 100%);
         }
 
         body {
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            background: linear-gradient(135deg, rgba(108,122,139,0.1) 0%, rgba(214,167,121,0.08) 100%);
-            margin: 0;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #e3edf7 0%, #f0f7fa 100%);
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            padding: 20px;
-            position: relative;
-            overflow: hidden;
-        }
-
-        body::before {
-            content: '';
-            position: absolute;
-            width: 200%;
-            height: 200%;
-            background: 
-                radial-gradient(circle at 20% 80%, 
-                    rgba(108,122,139,0.08) 0%, 
-                    transparent 60%),
-                radial-gradient(circle at 80% 20%, 
-                    rgba(214,167,121,0.08) 0%, 
-                    transparent 60%);
-            transform: rotate(15deg);
-            z-index: -1;
+            margin: 0;
+            line-height: 1.6;
         }
 
         .login-container {
-            background: rgba(255, 255, 255, 0.98);
+            background: var(--glass-effect);
+            padding: 3rem 4rem;
+            border-radius: 24px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
             width: 100%;
-            max-width: 420px;
-            padding: 2.5rem;
-            border-radius: 16px;
-            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
-            backdrop-filter: blur(8px);
-            transform: translateY(-20px);
-            transition: var(--transition);
-            border: 1px solid rgba(255,255,255,0.3);
+            max-width: 480px;
+            backdrop-filter: blur(12px);
         }
 
-        h1 {
-            color: var(--mist-blue);
+        h2 {
+            color: var(--text-primary);
             text-align: center;
-            margin: 0 0 2rem 0;
-            font-size: 2.2rem;
-            font-weight: 600;
-            letter-spacing: 1px;
+            margin: 0 0 2.8rem;
+            font-size: 2.4rem;
+            font-weight: 700;
+            letter-spacing: -0.8px;
+            background: linear-gradient(135deg, var(--primary-blue), var(--accent-orange));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .input-group {
             position: relative;
-            padding-bottom: 1.2rem;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.05);
+            width: 100%; /* 确保容器宽度统一 */
         }
 
-        h1::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 80px;
-            height: 3px;
-            background: var(--morandi-orange);
-            border-radius: 2px;
-        }
-
-        .form-group {
-            margin-bottom: 1.8rem;
-            position: relative;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 0.75rem;
-            color: var(--deep-gray);
-            font-weight: 500;
-            font-size: 0.95rem;
-            padding-left: 8px;
-            position: relative;
-        }
-
-        label::before {
-            content: '';
-            position: absolute;
-            left: -8px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 4px;
-            height: 16px;
-            background: var(--morandi-orange);
-            border-radius: 2px;
-        }
-
-        input[type="text"],
-        input[type="password"] {
-            width: 100%;
-            padding: 14px 16px;
-            border: 2px solid #E2E8F0;
-            border-radius: 10px;
-            font-size: 1rem;
-            color: var(--deep-gray);
-            transition: var(--transition);
-            background: rgba(255,255,255,0.9);
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.03);
-        }
-
-        input[type="text"]:focus,
-        input[type="password"]:focus {
-            border-color: var(--morandi-orange);
-            box-shadow: 0 0 0 3px rgba(214, 167, 121, 0.15);
-            outline: none;
-            background: #fff;
+        input {
+            width: calc(100% - 4rem); /* 计算图标占位 */
+            padding: 1.2rem 2rem 1.2rem 3.2rem;
+            border: 2px solid var(--secondary-blue);
+            border-radius: 12px;
+            font-size: 1.1rem;
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+            background: rgba(255, 255, 255, 0.8);
+            color: var(--text-primary);
+            box-sizing: border-box; /* 确保宽度计算包含padding */
         }
 
         button {
-            width: 100%;
-            padding: 16px;
-            background: var(--morandi-orange);
+            width: 100%; /* 按钮宽度与输入框对齐 */
+            background: linear-gradient(135deg, var(--accent-orange), #DF6B5A);
             color: white;
+            padding: 1.4rem;
             border: none;
-            border-radius: 10px;
-            font-size: 1.05rem;
-            font-weight: 600;
+            border-radius: 12px;
+            font-size: 1.1rem;
             cursor: pointer;
-            transition: var(--transition);
-            letter-spacing: 1px;
-            margin-top: 1.5rem;
-            box-shadow: 0 4px 6px rgba(214,167,121,0.15);
-            position: relative;
-            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            box-shadow: 0 8px 24px rgba(229, 127, 110, 0.3);
+            box-sizing: border-box; /* 统一盒模型 */
         }
 
-        button:hover {
-            background: #C89364;
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(214,167,121,0.25);
+        .input-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--primary-blue);
+            opacity: 0.6;
+        }
+
+        button {
+            background: linear-gradient(135deg, var(--accent-orange), #DF6B5A);
+            color: white;
+            padding: 1.4rem;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            margin-top: 1.2rem;
+            box-shadow: 0 8px 24px rgba(229, 127, 110, 0.3);
+            position: relative;
+            overflow: hidden;
         }
 
         button::after {
@@ -158,110 +117,110 @@
             left: -50%;
             width: 200%;
             height: 200%;
-            background: linear-gradient(
-                45deg,
-                transparent,
-                rgba(255,255,255,0.2),
-                transparent
-            );
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.2), transparent);
             transform: rotate(45deg);
-            transition: var(--transition);
+            transition: all 0.6s ease;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 32px rgba(229, 127, 110, 0.4);
         }
 
         button:hover::after {
-            animation: shine 1.5s;
-        }
-
-        @keyframes shine {
-            0% { left: -50%; }
-            100% { left: 150%; }
+            left: 150%;
         }
 
         .error-message {
-            color: #C53030;
-            background: #FFF5F5;
-            padding: 1rem;
-            border-radius: 10px;
-            margin-bottom: 1.5rem;
-            border: 1px solid #FED7D7;
-            font-size: 0.95rem;
-            position: relative;
-            padding-left: 2.5rem;
-        }
-
-        .error-message::before {
-            content: '!';
-            position: absolute;
-            left: 1rem;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 24px;
-            height: 24px;
-            background: #C53030;
             color: white;
-            border-radius: 50%;
+            background: var(--accent-orange);
+            padding: 1.2rem;
+            border-radius: 8px;
+            margin: -0.8rem 0 2rem;
+            text-align: center;
+            opacity: 0;
+            transform: scale(0.9);
+            transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            font-size: 0.95rem;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-weight: bold;
+            gap: 0.8rem;
         }
 
-        .datetime-info {
-            text-align: center;
-            margin-top: 2.5rem;
-            color: var(--mist-blue);
-            font-size: 0.9rem;
-            padding-top: 1.5rem;
-            border-top: 1px solid rgba(108,122,139,0.1);
-            font-weight: 500;
-            letter-spacing: 0.5px;
+        .error-message.show {
+            opacity: 1;
+            transform: scale(1);
         }
 
         @media (max-width: 480px) {
             .login-container {
-                padding: 1.8rem;
-                margin: 0 15px;
-                border-radius: 12px;
+                padding: 2.5rem;
+                margin: 0 1.2rem;
+                border-radius: 20px;
             }
             
-            h1 {
-                font-size: 1.8rem;
-                padding-bottom: 1rem;
+            h2 {
+                font-size: 2rem;
             }
-
-            button {
-                padding: 14px;
+            
+            input {
+                padding: 1rem 1.6rem;
+                padding-left: 2.8rem;
             }
         }
     </style>
 </head>
 <body>
     <div class="login-container">
-        <h1>督办管理系统登录</h1>
-        
-        {% if error %}
-            <div class="error-message">{{ error }}</div>
-        {% endif %}
-
-        <form method="POST" action="{{ url_for('login') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            
-            <div class="form-group">
-                <label for="username">用户名</label>
-                <input type="text" id="username" name="username" required autofocus>
-            </div>
-
-            <div class="form-group">
-                <label for="password">密码</label>
-                <input type="password" id="password" name="password" required>
-            </div>
-
-            <button type="submit">立即登录</button>
-        </form>
-
-        <div class="datetime-info">
-            系统时间：{{ current_datetime.strftime('%Y-%m-%d %H:%M:%S') }}
+        <h2>用户登录</h2>
+        <div class="error-message" id="errorMsg">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 8v4m0 4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/>
+            </svg>
+            <span>错误提示信息</span>
         </div>
+        <form method="POST" onsubmit="return validateForm()">
+            <div class="input-group">
+                <svg class="input-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+                <input type="text" name="username" placeholder="用户名" required>
+            </div>
+            <div class="input-group">
+                <svg class="input-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+                <input type="password" name="password" placeholder="密码" required>
+            </div>
+            <button type="submit">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+                立即登录
+            </button>
+        </form>
     </div>
+
+    <script>
+        function validateForm() {
+            const username = document.getElementsByName('username')[0].value;
+            const password = document.getElementsByName('password')[0].value;
+            const errorMsg = document.getElementById('errorMsg');
+
+            if(username.trim() === '' || password.trim() === '') {
+                errorMsg.querySelector('span').textContent = '用户名和密码不能为空！';
+                errorMsg.classList.add('show');
+                setTimeout(() => errorMsg.classList.remove('show'), 3500);
+                return false;
+            }
+            
+            errorMsg.classList.remove('show');
+            return true;
+        }
+    </script>
 </body>
 </html>

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>周报管理</title>
+    <link rel="stylesheet" href="https://cdn.staticfile.org/twitter-bootstrap/4.3.1/css/bootstrap.min.css">
+    <style>
+        :root {
+            --morandi-blue: #6B8AA0;
+            --morandi-orange: #D99748;
+            --table-border: #dee2e6;
+        }
+
+        body {
+            background-color: #f8f9fa;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 15px;
+        }
+
+        .header {
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid var(--morandi-blue);
+        }
+
+        .header h2 {
+            color: var(--morandi-blue);
+            font-weight: 600;
+            margin-bottom: 25px;
+        }
+
+        .btn-custom {
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            font-size: 1.25rem;
+            border: none;
+        }
+
+        .btn-primary {
+            background-color: var(--morandi-blue);
+            border-color: var(--morandi-blue);
+        }
+
+        .btn-primary:hover {
+            background-color: #5c788d;
+            border-color: #5c788d;
+        }
+
+        .btn-info {
+            background-color: var(--morandi-orange);
+            border-color: var(--morandi-orange);
+        }
+
+        .btn-info:hover {
+            background-color: #c28640;
+            border-color: #c28640;
+        }
+
+        .nav-buttons {
+            margin: 30px 0;
+        }
+
+        .nav-buttons .col-md-6 {
+            padding: 0 8px;
+            margin-bottom: 16px;
+        }
+
+        table {
+            border: 1px solid var(--table-border);
+            margin-top: 20px;
+        }
+
+        table thead th {
+            background-color: #E9ECEF;
+            border-bottom: 2px solid var(--morandi-blue);
+            color: var(--morandi-blue);
+            font-weight: 600;
+        }
+
+        table td, table th {
+            padding: 12px;
+            vertical-align: middle;
+            border: 1px solid var(--table-border);
+        }
+
+        .submitted {
+            background-color: #ffe5d0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2 class="mb-0">周报管理系统</h2>
+                <a href="/home" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> 返回主菜单
+                </a>
+            </div>
+        </div>
+
+        <div class="nav-buttons row">
+            <div class="col-md-6">
+                <a href="/personal_weekly" class="btn btn-primary btn-custom">
+                    <i class="fas fa-user-circle mr-2"></i>个人周报管理
+                </a>
+            </div>
+            <div class="col-md-6">
+                <a href="/company_weekly" class="btn btn-info btn-custom">
+                    <i class="fas fa-building mr-2"></i>公司周报管理
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Font Awesome for icons -->
+    <script src="https://cdn.staticfile.org/font-awesome/5.15.4/js/all.min.js"></script>
+</body>
+</html>

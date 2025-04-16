@@ -1,39 +1,87 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>编辑用户</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <script>
-        function showAlert(message) {
-            alert(message);
-            window.location.href = "{{ url_for('user_management') }}";
+    <title>Edit User</title>
+    <style>
+        .container { max-width: 600px; margin: 20px auto; padding: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; }
+        input[type="text"], 
+        input[type="password"] { 
+            width: 100%; 
+            padding: 8px;
+            margin-bottom: 10px;
         }
-        {% with messages = get_flashed_messages() %}
-            {% if messages %}
-                {% for message in messages %}
-                    showAlert("{{ message }}");
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-    </script>
+        .checkbox-group { 
+            margin: 15px 0;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover { background-color: #45a049; }
+        .back-link { display: block; margin-top: 15px; }
+    </style>
 </head>
 <body>
     <div class="container">
-        <h2>编辑用户</h2>
-        <form method="post">
-            <!-- 修复后的CSRF令牌 -->
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <h1>Edit User</h1>
+        <form method="POST">
+            <div class="form-group">
+                <label>Username:</label>
+                <input type="text" name="username" value="{{ user.username }}" required>
+            </div>
             
             <div class="form-group">
-                <label>用户名：<input type="text" value="{{ user[1] }}" disabled></label>
-                <label>新密码：<input type="password" name="password"></label>
-                <label>手机号：<input type="text" name="phone" value="{{ user[3] }}"></label>
-                <label><input type="checkbox" name="is_admin" value="1" {% if user[4] %}checked{% endif %}> 管理员</label>
-                <input type="hidden" name="user_id" value="{{ user[0] }}">
-                <button type="submit" name="update_user" class="btn">保存修改</button>
-                <a href="{{ url_for('user_management') }}" class="btn">返回</a>
+                <label>Password (留空不修改):</label>
+                <input type="password" name="password" placeholder="输入新密码">
             </div>
+            
+            <div class="form-group">
+                <label>Department:</label>
+                <input type="text" name="department" value="{{ user.department }}">
+            </div>
+            
+            <div class="form-group">
+                <label>Phone:</label>
+                <input type="text" name="phone" value="{{ user.phone }}">
+            </div>
+            
+            <div class="checkbox-group">
+                <label>
+                    <input type="checkbox" name="is_admin" {% if user.is_admin %}checked{% endif %}>
+                    Administrator
+                </label>
+                <label>
+                    <input type="checkbox" name="is_department_info" {% if user.is_department_info %}checked{% endif %}>
+                    Department Info
+                </label>
+                <label>
+                    <input type="checkbox" name="is_department_head" {% if user.is_department_head %}checked{% endif %}>
+                    Department Head
+                </label>
+                <label>
+                    <input type="checkbox" name="is_company_info" {% if user.is_company_info %}checked{% endif %}>
+                    Company Info
+                </label>
+                <label>
+                    <input type="checkbox" name="is_general_dept_head" {% if user.is_general_dept_head %}checked{% endif %}>
+                    General Dept Head
+                </label>
+                <label>
+                    <input type="checkbox" name="is_company_leader" {% if user.is_company_leader %}checked{% endif %}>
+                    Company Leader
+                </label>
+            </div>
+            
+            <button type="submit">Update User</button>
+            <a href="/user_management" class="back-link">← Back to User Management</a>
         </form>
     </div>
 </body>

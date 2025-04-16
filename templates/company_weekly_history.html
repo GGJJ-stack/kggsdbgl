@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>公司周报历史记录</title>
+    <link rel="stylesheet" href="https://cdn.staticfile.org/twitter-bootstrap/4.3.1/css/bootstrap.min.css">
+    <style>
+        :root {
+            --morandi-blue: #6C8EBF;
+            --morandi-orange: #D9976C;
+        }
+        
+        body { background-color: #f8f9fa; }
+        
+        .container { max-width: 1200px; margin: 30px auto; padding: 0 15px; }
+        
+        .archive-card { 
+            margin-bottom: 25px; 
+            border-radius: 8px;
+            border: 1px solid rgba(0,0,0,.05);
+            transition: transform 0.2s;
+        }
+        .archive-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(108,142,191,.1);
+        }
+        
+        .card-header {
+            background-color: var(--morandi-blue);
+            color: white;
+            border-radius: 8px 8px 0 0 !important;
+            padding: 1rem 1.5rem;
+        }
+        
+        .btn-outline-primary {
+            border-color: var(--morandi-blue);
+            color: var(--morandi-blue);
+        }
+        .btn-outline-primary:hover {
+            background-color: var(--morandi-blue);
+            border-color: var(--morandi-blue);
+        }
+        
+        .btn-success {
+            background-color: var(--morandi-orange);
+            border-color: var(--morandi-orange);
+            color: white;
+        }
+        .btn-success:hover {
+            background-color: #C8875C;
+            border-color: #C8875C;
+        }
+        
+        .table {
+            border: 1px solid #dee2e6;
+            margin-top: 1rem;
+        }
+        .table td, .table th {
+            border: 1px solid #dee2e6;
+            vertical-align: middle;
+        }
+        
+        .pagination .page-item.active .page-link {
+            background-color: var(--morandi-blue);
+            border-color: var(--morandi-blue);
+        }
+        .pagination .page-link {
+            color: var(--morandi-blue);
+            margin: 0 5px;
+            border-radius: 4px;
+        }
+        .pagination .page-link:hover {
+            color: var(--morandi-orange);
+        }
+        
+        .timestamp { 
+            font-size: 0.85em; 
+            color: #666;
+            margin-top: 1.5rem;
+        }
+        
+        .header h3 {
+            color: var(--morandi-blue);
+            font-weight: 600;
+            margin: 2rem 0 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="/company_weekly" class="btn btn-outline-primary btn-sm">← 返回当前周报</a>
+            <h3>公司周报历史记录</h3>
+        </div>
+
+        {% for archive in archive_data %}
+        <div class="card archive-card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">归档版本 {{ archive.archive_time.strftime('%Y-%m-%d %H:%M') }}</h5>
+                <div>
+                    <a href="{{ url_for('export_company_weekly_archive', archive_time=archive.archive_time.isoformat()) }}" 
+                       class="btn btn-success btn-sm">导出Excel</a>
+                    {% if is_admin %}
+                    <a href="{{ url_for('delete_company_weekly_archive', archive_time=archive.archive_time.isoformat()) }}" 
+                       class="btn btn-outline-primary btn-sm ml-2"
+                       onclick="return confirm('确定要删除该历史记录吗？')">删除</a>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body">
+                <table class="table table-hover">
+                    <thead class="thead-light">
+                        <tr>
+                            <th style="width: 20%">部门</th>
+                            <th style="width: 40%">本周工作</th>
+                            <th style="width: 40%">下周计划</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for report in archive.reports %}
+                        <tr>
+                            <td>{{ report.department }}</td>
+                            <td style="white-space: pre-wrap">{{ report.current_work }}</td>
+                            <td style="white-space: pre-wrap">{{ report.next_plan }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <div class="timestamp">
+                    归档时间：{{ archive.archive_time.strftime('%Y-%m-%d %H:%M:%S') }}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        <nav class="mt-4">
+            <ul class="pagination justify-content-center">
+                {% if archives.has_prev %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ archives.prev_num }}">上一页</a>
+                </li>
+                {% endif %}
+                
+                {% for page_num in archives.iter_pages() %}
+                <li class="page-item {% if page_num == archives.page %}active{% endif %}">
+                    <a class="page-link" href="?page={{ page_num }}">{{ page_num }}</a>
+                </li>
+                {% endfor %}
+                
+                {% if archives.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ archives.next_num }}">下一页</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</body>
+</html>

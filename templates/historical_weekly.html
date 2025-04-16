@@ -1,0 +1,157 @@
+{% block title %}历史公司个人周报查询{% endblock %}
+{% block content %}
+
+<style>
+    :root {
+        --morandi-blue: #6C8EBF;
+        --morandi-orange: #D9975C;
+        --table-header-bg: #5A779E;
+        --table-zebra: #f8f9fa;
+    }
+    .card {
+        border: none;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        min-height: calc(100vh - 120px);
+        display: flex;
+        flex-direction: column;
+    }
+    .table {
+        margin-bottom: 0;
+        border: 1px solid #dee2e6;
+    }
+    .table th, .table td {
+        border: 1px solid #dee2e6!important;
+        vertical-align: top;
+        padding: 1rem!important;
+    }
+    .table thead th {
+        background: var(--table-header-bg);
+        color: white;
+        border-bottom: 2px solid #dee2e6!important;
+    }
+    .btn-secondary {
+        background: var(--morandi-blue);
+        border: none;
+        color: white;
+    }
+    .btn-outline-secondary {
+        border-color: var(--morandi-orange);
+        color: var(--morandi-orange);
+    }
+    .btn-outline-secondary:hover {
+        background: var(--morandi-orange);
+        color: white;
+    }
+    .department-cell {
+        background-color: #f0f4f8;
+        font-weight: 500;
+    }
+</style>
+
+<div class="container-fluid p-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="mb-0 text-morandi-blue">
+            <i class="fas fa-archive me-2"></i>历史周报
+        </h4>
+        <a href="/personal_weekly" class="btn btn-secondary px-4">
+            <i class="fas fa-arrow-left me-2"></i>返回
+        </a>
+    </div>
+
+    <div class="card">
+        <div class="card-body p-0 d-flex flex-column">
+            <div class="table-responsive flex-grow-1">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 15%">部门</th>
+                            <th style="width: 10%">姓名</th>
+                            <th style="width: 40%">本周工作</th>
+                            <th style="width: 35%">下周计划</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% set dept_counts = {} %}
+                        {% for r in reports %}
+                            {% if r.department not in dept_counts %}
+                                {% set _ = dept_counts.update({r.department: 1}) %}
+                            {% else %}
+                                {% set _ = dept_counts.update({r.department: dept_counts[r.department] + 1}) %}
+                            {% endif %}
+                        {% endfor %}
+
+                        {% set processed_depts = [] %}
+                        {% for r in reports %}
+                            {% if r.department not in processed_depts %}
+                            <tr>
+                                <td class="department-cell" rowspan="{{ dept_counts[r.department] }}">{{ r.department }}</td>
+                                <td>{{ r.username }}</td>
+                                <td style="white-space: pre-wrap">{{ r.current_work }}</td>
+                                <td style="white-space: pre-wrap">{{ r.next_plan }}</td>
+                            </tr>
+                            {% set _ = processed_depts.append(r.department) %}
+                            {% else %}
+                            <tr>
+                                <td>{{ r.username }}</td>
+                                <td style="white-space: pre-wrap">{{ r.current_work }}</td>
+                                <td style="white-space: pre-wrap">{{ r.next_plan }}</td>
+                            </tr>
+                            {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 保持底部操作栏和分页不变 -->
+            <div class="d-flex justify-content-between align-items-center p-3 border-top">
+                <div class="text-muted small">
+                    归档版本：{{ archive_time if archive_time else "当前版本" }}
+                </div>
+                
+                <div class="d-flex gap-2">
+                    <a href="/export_weekly?page={{ pagination.page }}" class="btn btn-outline-secondary px-4">
+                        <i class="fas fa-download me-2"></i>导出
+                    </a>
+                    {% if current_user.is_admin %}
+                    <form method="post" action="{{ url_for('delete_historical_weekly', page_id=pagination.items[0].page) }}">
+                        <button type="submit" class="btn btn-outline-danger px-4" 
+                                onclick="return confirm('确定删除本页？')">
+                            <i class="fas fa-trash me-2"></i>删除
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-center p-3">
+                <nav>
+                    <ul class="pagination mb-0">
+                        {% if pagination.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('historical_weekly', page=pagination.prev_num) }}">
+                                上一页
+                            </a>
+                        </li>
+                        {% endif %}
+                        
+                        <li class="page-item disabled">
+                            <span class="page-link">
+                                {{ pagination.page }}/{{ pagination.pages }}
+                            </span>
+                        </li>
+
+                        {% if pagination.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('historical_weekly', page=pagination.next_num) }}">
+                                下一页
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>督办管理</title>
+    <style>
+        :root {
+            --primary: #3A506B;  /* 莫兰迪蓝 */
+            --accent: #D97B2B;   /* 莫兰迪橙 */
+            --text: #2D3E50;
+            --border: #D0D7DE;
+            --bg: #F8FAFC;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            margin: 40px auto;
+            max-width: 1200px;
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        .container {
+            background: white;
+            padding: 32px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            margin: 0 20px;
+        }
+
+        h2 {
+            font-size: 28px;
+            font-weight: 600;
+            margin: 0;
+            color: var(--primary);
+        }
+
+        .header-area {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 28px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--border);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 28px 0;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        th, td {
+            padding: 16px 24px;
+            text-align: left;
+            border: 1px solid var(--border);
+        }
+
+        th {
+            background-color: var(--primary);
+            color: white;
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            min-width: 72px;
+        }
+
+        .add-btn {
+            background-color: var(--accent);
+            color: white;
+            padding: 10px 24px;
+        }
+
+        .action-btn {
+            background-color: var(--primary);
+            color: white;
+            margin-right: 8px;
+        }
+
+        .delete-btn {
+            background-color: #E54C4C;
+        }
+
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .return-btn {
+            display: flex;
+            margin: 24px auto 0;
+            background-color: var(--primary);
+            color: white;
+            padding: 10px 32px;
+        }
+    </style>
+    <script>
+        function showAddDialog() {
+            const projectName = prompt('请输入新增督办项目名称：');
+            if (projectName) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/add_supervision';
+                
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'project_name';
+                input.value = projectName;
+                
+                form.appendChild(input);
+                document.body.appendChild(form);
+                form.submit();
+            }
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <div class="header-area">
+            <h2>督办项目管理</h2>
+            <button onclick="showAddDialog()" class="add-btn">+ 新增项目</button>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th width="70%">项目名称</th>
+                    <th width="30%">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for project in projects %}
+                <tr>
+                    <td>{{ project.project_name }}</td>
+                    <td>
+                        <button class="action-btn" onclick="if(confirm('确认删除？')) location.href='/delete_supervision/{{ project.id }}'">删除</button>
+                        <button class="action-btn" onclick="location.href='/supervision_detail/{{ project.id }}'">详情</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <a href="/home"><button class="return-btn">返回首页</button></a>
+    </div>
+</body>
+</html>

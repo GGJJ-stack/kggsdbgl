@@ -1,0 +1,57 @@
+<!-- templates/project_progress.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>项目进度 - {{ detail.main_content }}</title>
+    <style>
+        .pending { background-color: #FFF3CD; }
+        .approved { background-color: #D4EDDA; }
+        .rejected { background-color: #F8D7DA; }
+    </style>
+</head>
+<body>
+    <h2>{{ detail.main_content }} - 进度跟踪</h2>
+    <a href="/supervision_detail/{{ detail.project_id }}"><button>返回项目详情</button></a>
+    {% if has_access %}
+    <div style="margin: 20px 0;">
+        <h3>提交新进度</h3>
+        <form method="POST" action="/submit_progress/{{ detail.id }}">
+            <textarea name="content" rows="4" style="width: 500px;" required></textarea><br>
+            <button type="submit">提交进度</button>
+        </form>
+    </div>
+    {% endif %}
+
+    <h3>历史进度记录</h3>
+    <table border="1" style="width: 100%;">
+        <thead>
+            <tr>
+                <th>提交时间</th>
+                <th>提交人</th>
+                <th>进度内容</th>
+                <th>状态</th>
+                <th>审核人</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for record in progress_records %}
+            <tr class="{{ 'approved' if record.status == '已通过' else 'rejected' if record.status == '已驳回' else 'pending' }}">
+                <td>{{ record.submit_time.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>{{ record.submitter }}</td>
+                <td>{{ record.content }}</td>
+                <td>
+                    {{ record.status }}
+                    <!-- 修复审核按钮显示条件 -->
+                    {% if (is_admin or is_company_leader) and record.status == '待审核' %}
+                    <br>
+                    <button onclick="location.href='/review_progress/{{ record.id }}/approve'">通过</button>
+                    <button onclick="location.href='/review_progress/{{ record.id }}/reject'">驳回</button>
+                    {% endif %}
+                </td>
+                <td>{{ record.reviewer or '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>

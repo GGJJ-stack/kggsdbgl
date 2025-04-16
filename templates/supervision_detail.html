@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ project.project_name }}管理</title>
+    <style>
+        :root {
+            --morandi-blue: #6D8B9E;
+            --morandi-orange: #D9976A;
+            --background: #F5F7FA;
+            --table-border: #E0E4E8;
+        }
+        body {
+            margin: 20px;
+            background-color: var(--background);
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            color: #4A4A4A;
+        }
+        .container {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 24px;
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .button-group {
+            margin-bottom: 24px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: var(--morandi-blue);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+            min-width: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        button:hover {
+            background-color: #5B7786;
+            transform: translateY(-1px);
+        }
+        .highlight-orange {
+            background-color: var(--morandi-orange) !important;
+        }
+        .highlight-orange:hover {
+            background-color: #C4875D !important;
+        }
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-top: 20px;
+            table-layout: fixed;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 14px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--table-border);
+            word-wrap: break-word;
+            vertical-align: middle;
+        }
+        th {
+            background-color: var(--morandi-blue);
+            color: white;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        tr:nth-child(even) {
+            background-color: #F9FAFB;
+        }
+        .overdue { background-color: #FFF3E8; }
+        .status-completed { color: var(--morandi-orange); font-weight: 500; }
+        .status-overdue { color: #E74C3C; font-weight: 500; }
+
+        #addModal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 28px 32px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            z-index: 1000;
+            width: 520px;
+        }
+        .modal-backdrop {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.3);
+            z-index: 999;
+            backdrop-filter: blur(2px);
+        }
+        .modal-content {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+        .modal-content input, 
+        .modal-content select {
+            padding: 10px 14px;
+            border: 1px solid #DCE0E4;
+            border-radius: 6px;
+            width: 100%;
+            transition: border-color 0.2s;
+            font-size: 14px;
+        }
+        .modal-content input:focus,
+        .modal-content select:focus {
+            border-color: var(--morandi-blue);
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(109,139,158,0.2);
+        }
+        .modal-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+            justify-content: flex-end;
+        }
+        .modal-buttons button[type="submit"] {
+            background-color: var(--morandi-orange);
+            padding: 10px 24px;
+        }
+
+        [rowspan] { vertical-align: middle !important; }
+
+        @media screen and (max-width: 1400px) {
+            .container {
+                margin: 12px;
+                padding: 18px;
+            }
+            table {
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="button-group">
+            {% if source == 'supervision' %}
+                <button onclick="location.href='/import_project_details/{{ project.id }}'">一键导入</button>
+                <button onclick="location.href='/export_project_details/{{ project.id }}'">一键导出</button>
+                <button onclick="location.href='/supervision'">返回督办管理</button>
+            {% else %}
+                <button onclick="location.href='/import_plan_details/{{ project.id }}'">一键导入</button>
+                <button onclick="location.href='/export_plan_details/{{ project.id }}'">一键导出</button>
+                <button onclick="location.href='/plan_management'">返回计划管理</button>
+            {% endif %}
+            <button class="highlight-orange" onclick="showAddForm()">新增条目</button>
+        </div>
+
+        <div class="modal-backdrop" id="modalBackdrop"></div>
+        <div id="addModal">
+            <h3 style="margin:0 0 20px 0;color:#2C3E50;font-weight:600">新增工作条目</h3>
+            <form id="addForm" onsubmit="return submitForm(event)">
+                <div class="modal-content">
+                    <div>
+                        <label>主要内容：</label>
+                        <input type="text" name="main_content" required>
+                    </div>
+                    <div>
+                        <label>关键节点：</label>
+                        <input type="text" name="key_node">
+                    </div>
+                    <div>
+                        <label>责任部门：</label>
+                        <input type="text" name="responsible_dept" required>
+                    </div>
+                    <div>
+                        <label>责任人：</label>
+                        <select name="responsible_person" required>
+                            {% for user in users %}
+                            <option value="{{ user.username }}">{{ user.username }}（{{ user.department }}）</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label>配合部门：</label>
+                        <input type="text" name="cooperating_dept">
+                    </div>
+                    <div>
+                        <label>配合人：</label>
+                        <select name="cooperating_persons" multiple style="height:100px">
+                            {% for user in users %}
+                            <option value="{{ user.username }}">{{ user.username }}（{{ user.department }}）</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label>责任领导：</label>
+                        <select name="responsible_leader" required>
+                            {% for leader in leaders %}
+                            <option value="{{ leader.username }}">{{ leader.username }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label>完成时限：</label>
+                        <input type="date" name="deadline">
+                    </div>
+                </div>
+                <div class="modal-buttons">
+                    <button type="submit">提交</button>
+                    <button type="button" onclick="hideAddForm()">取消</button>
+                </div>
+            </form>
+        </div>
+
+        <div style="overflow-x: auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:10%">主要内容</th>
+                        <th style="width:8%">关键节点</th>
+                        <th style="width:8%">责任部门</th>
+                        <th style="width:8%">责任人</th>
+                        <th style="width:8%">配合部门</th>
+                        <th style="width:8%">配合人</th>
+                        <th style="width:8%">责任领导</th>
+                        <th style="width:8%">完成时限</th>
+                        <th style="width:8%">完成时间</th>
+                        <th style="width:6%">状态</th>
+                        <th style="width:15%">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for group in merged_details %}
+                    {% set detail = group.details[0] %}
+                    <tr class="{% if detail.status in ['逾期','逾期完成'] %}overdue{% endif %}">
+                        <td rowspan="{{ group.rowspan }}" style="vertical-align:middle">{{ group.main_content }}</td>
+                        <td>{{ detail.key_node }}</td>
+                        <td>{{ detail.responsible_dept }}</td>
+                        <td>{{ detail.responsible_person }}</td>
+                        <td>{{ detail.cooperating_dept }}</td>
+                        <td>{{ detail.cooperating_persons }}</td>
+                        <td>{{ detail.responsible_leader }}</td>
+                        <td>{{ detail.deadline.strftime('%Y-%m-%d') if detail.deadline else '' }}</td>
+                        <td>{{ detail.completion_time.strftime('%Y-%m-%d') if detail.completion_time else '' }}</td>
+                        <td class="status-{{ 'completed' if '完成' in detail.status else 'overdue' }}">
+                            {{ detail.status }}
+                        </td>
+                        <td>
+                            <div style="display:flex;flex-direction:column;gap:3px;width:100%">
+                                <a href="{% if source == 'plan' %}/plan_progress/{{ detail.id }}{% else %}/project_progress/{{ detail.id }}{% endif %}">
+                                    <button style="padding:3px 6px;width:100%;font-size:13px">详情</button>
+                                </a>
+                                {% if is_admin %}
+                                <button style="padding:3px 6px;width:100%;font-size:13px" 
+                                        data-detail-id="{{ detail.id }}" 
+                                        data-source="{{ source }}" 
+                                        onclick="markComplete(this)">完成</button>
+                                <button style="padding:3px 6px;width:100%;font-size:13px" 
+                                        data-detail-id="{{ detail.id }}" 
+                                        data-project-id="{{ project.id }}"
+                                        data-source="{{ source }}" 
+                                        onclick="deleteDetail(this)">删除</button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% for detail in group.details[1:] %}
+                    <tr class="{% if detail.status in ['逾期','逾期完成'] %}overdue{% endif %}">
+                        <td>{{ detail.key_node }}</td>
+                        <td>{{ detail.responsible_dept }}</td>
+                        <td>{{ detail.responsible_person }}</td>
+                        <td>{{ detail.cooperating_dept }}</td>
+                        <td>{{ detail.cooperating_persons }}</td>
+                        <td>{{ detail.responsible_leader }}</td>
+                        <td>{{ detail.deadline.strftime('%Y-%m-%d') if detail.deadline else '' }}</td>
+                        <td>{{ detail.completion_time.strftime('%Y-%m-%d') if detail.completion_time else '' }}</td>
+                        <td class="status-{{ 'completed' if '完成' in detail.status else 'overdue' }}">
+                            {{ detail.status }}
+                        </td>
+                        <td>
+                            <div style="display:flex;flex-direction:column;gap:3px;width:100%">
+                                <a href="{% if source == 'plan' %}/plan_progress/{{ detail.id }}{% else %}/project_progress/{{ detail.id }}{% endif %}">
+                                    <button style="padding:3px 6px;width:100%;font-size:13px">详情</button>
+                                </a>
+                                {% if is_admin %}
+                                <button style="padding:3px 6px;width:100%;font-size:13px" 
+                                        data-detail-id="{{ detail.id }}" 
+                                        data-source="{{ source }}" 
+                                        onclick="markComplete(this)">完成</button>
+                                <button style="padding:3px 6px;width:100%;font-size:13px" 
+                                        data-detail-id="{{ detail.id }}" 
+                                        data-project-id="{{ project.id }}"
+                                        data-source="{{ source }}" 
+                                        onclick="deleteDetail(this)">删除</button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function showAddForm() {
+            document.getElementById('addModal').style.display = 'block';
+            document.getElementById('modalBackdrop').style.display = 'block';
+        }
+
+        function hideAddForm() {
+            document.getElementById('addModal').style.display = 'none';
+            document.getElementById('modalBackdrop').style.display = 'none';
+        }
+
+        function submitForm(event) {
+            event.preventDefault();
+            const formData = new FormData(event.target);
+            const url = "{% if source == 'plan' %}/add_plan_detail/{{ project.id }}{% else %}/add_project_detail/{{ project.id }}{% endif %}";
+
+            fetch(url, {
+                method: 'POST',
+                body: formData,
+            })
+            .then(response => {
+                if(response.ok) {
+                    hideAddForm();
+                    location.reload();
+                } else {
+                    alert('提交失败: 服务器返回状态码 ' + response.status);
+                }
+            })
+            .catch(error => {
+                console.error('提交错误:', error);
+                alert('网络请求失败，请检查连接');
+            });
+        }
+
+        function markComplete(button) {
+            const detailId = button.dataset.detailId;
+            const source = button.dataset.source;
+            const completionDate = prompt('请输入完成时间（YYYY-MM-DD）：');
+
+            if (!completionDate) return;
+
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(completionDate)) {
+                alert("错误格式！必须使用YYYY-MM-DD格式");
+                return;
+            }
+
+            const endpoint = source === 'plan' 
+                ? `/complete_plan_detail/${detailId}`
+                : `/complete_project/${detailId}`;
+
+            const formData = new FormData();
+            formData.append('completion_time', completionDate);
+
+            fetch(endpoint, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.ok) {
+                    location.reload();
+                } else {
+                    response.text().then(text => alert(`操作失败: ${text}`));
+                }
+            })
+            .catch(error => {
+                console.error('完成操作错误:', error);
+                alert('网络请求失败');
+            });
+        }
+
+        // 修复后的删除功能
+        function deleteDetail(button) {
+            if(confirm('确定要删除此条目吗？')) {
+                const detailId = button.dataset.detailId;
+                const projectId = button.dataset.projectId;
+                const source = button.dataset.source;
+                const endpoint = source === 'plan' 
+                    ? `/delete_plan_detail/${detailId}`
+                    : `/delete_project_detail/${detailId}`;
+
+                fetch(endpoint, { 
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => {
+                    if(response.ok) {
+                        return response.json();
+                    }
+                    throw new Error('删除失败');
+                })
+                .then(data => {
+                    if(data.status === 'success') {
+                        window.location.href = data.redirect;
+                    } else {
+                        alert(data.message || '删除失败');
+                    }
+                })
+                .catch(error => {
+                    console.error('删除错误:', error);
+                    alert(error.message || '删除请求失败');
+                });
+            }
+        }
+
+        document.getElementById('modalBackdrop').addEventListener('click', hideAddForm);
+    </script>
+</body>
+</html>

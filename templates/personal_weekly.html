@@ -1,0 +1,279 @@
+{% block content %}
+<style>
+    :root {
+        --morandi-blue: #6B8AA3;
+        --morandi-dark-blue: #5A768C;
+        --morandi-orange: #D3B17D;
+        --table-border: #8AA8BF;
+        --highlight-bg: rgba(211, 177, 125, 0.15);
+    }
+    .container {
+        max-width: 1400px;
+        margin: 2rem auto;
+        padding: 0 15px;
+    }
+    .card {
+        border: 1px solid var(--morandi-blue);
+        border-radius: 8px;
+        box-shadow: 0 2px 12px rgba(107, 138, 163, 0.15);
+        margin-bottom: 2rem;
+    }
+    .card-header {
+        background: linear-gradient(135deg, var(--morandi-blue), var(--morandi-dark-blue));
+        color: white;
+        font-size: 1.1rem;
+        padding: 1.25rem 2rem;
+        border-radius: 8px 8px 0 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .btn {
+        padding: 0.5rem 1.25rem;
+        font-size: 0.95rem;
+        border-radius: 5px;
+        transition: all 0.3s ease;
+        min-width: 100px;
+        border: none;
+    }
+    .btn-secondary {
+        background-color: #8AA8BF;
+    }
+    .btn-success {
+        background-color: #7D9C88;
+    }
+    .table {
+        border: 1px solid var(--table-border);
+        margin: 0;
+        font-size: 0.95rem;
+    }
+    .table thead th {
+        background-color: #EFF4F8;
+        border-bottom: 2px solid var(--table-border);
+        color: var(--morandi-dark-blue);
+        font-weight: 600;
+        padding: 1rem;
+    }
+    .table td {
+        vertical-align: middle;
+        padding: 1rem;
+        border: 1px solid var(--table-border);
+        position: relative;  
+    }
+    textarea.form-control {
+        min-height: 120px;
+        border: 1px solid var(--table-border);
+        font-size: 0.95rem;
+        resize: vertical;
+        width: 100%;         
+        height: 100%;       
+        box-sizing: border-box; 
+        display: block;       
+        margin: 0;           
+        padding: 0.5rem;     
+        line-height: 1.5;    
+    }
+    /* 修改模板文本域行高为5倍 */
+    .card .form-group textarea.form-control {
+        min-height: 24px;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.8rem;
+        line-height: 6;  /* 原1.2的5倍 */
+        height: auto;
+    }
+    pre {
+        background-color: #F8FAFC;
+        border: 1px solid var(--table-border);
+        padding: 1.25rem;
+        border-radius: 6px;
+        color: #4A667F;
+        line-height: 1.6;
+    }
+    .unedited-row {
+        background-color: var(--highlight-bg) !important;
+    }
+    .status-indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 8px;
+    }
+    .submitted { background-color: #7D9C88; }
+    .pending { background-color: var(--morandi-orange); }
+</style>
+
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0" style="color: var(--morandi-dark-blue);">
+            <i class="fas fa-file-alt me-2"></i>周报管理系统
+        </h2>
+        <div>
+            <a href="{{ url_for('historical_weekly') }}" class="btn btn-info">
+                <i class="fas fa-history me-2"></i>历史记录
+            </a>
+            {% if show_archive_button %}
+            <form action="{{ url_for('archive_weekly') }}" method="post" class="d-inline ms-2">
+                <button type="submit" class="btn btn-warning">
+                    <i class="fas fa-archive me-2"></i>归档周报
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Template Section -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <span><i class="fas fa-clipboard-list me-2"></i>部门周报模板</span>
+        </div>
+        <div class="card-body">
+            {% if user.is_company_info or user.is_general_dept_head %}
+            <form method="POST">
+                <div class="row g-4">
+                    <div class="col-lg-6">
+                        <div class="form-group">
+                            <label class="form-label fw-bold text-morandi-dark-blue mb-2">
+                                <i class="fas fa-tasks me-2"></i>本周工作模板
+                            </label>
+                            <textarea class="form-control shadow-sm" name="current_work" 
+                                     rows="1">{{ template.current_work if template else '' }}</textarea>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="form-group">
+                            <label class="form-label fw-bold text-morandi-dark-blue mb-2">
+                                <i class="fas fa-calendar-check me-2"></i>下周计划模板
+                            </label>
+                            <textarea class="form-control shadow-sm" name="next_plan" 
+                                     rows="1">{{ template.next_plan if template else '' }}</textarea>
+                        </div>
+                    </div>
+                    <div class="col-12 text-end">
+                        <button type="submit" class="btn btn-primary px-4">
+                            <i class="fas fa-save me-2"></i>保存模板
+                        </button>
+                    </div>
+                </div>
+            </form>
+            {% else %}
+            <div class="row g-4">
+                <div class="col-lg-6">
+                    <div class="form-group">
+                        <label class="form-label fw-bold text-morandi-dark-blue mb-2">
+                            <i class="fas fa-tasks me-2"></i>本周工作模板
+                        </label>
+                        <textarea class="form-control shadow-sm" name="current_work" 
+                                 rows="1">{{ template.current_work if template else '' }}</textarea>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="form-group">
+                        <label class="form-label fw-bold text-morandi-dark-blue mb-2">
+                            <i class="fas fa-calendar-check me-2"></i>下周计划模板
+                        </label>
+                        <textarea class="form-control shadow-sm" name="next_plan" 
+                                 rows="1">{{ template.next_plan if template else '' }}</textarea>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 表格部分保持不变 -->
+    <div class="card">
+        <div class="card-header">
+            <span><i class="fas fa-edit me-2"></i>个人周报填写</span>
+            <div>
+                <button type="button" class="btn btn-secondary" 
+                        onclick="window.location.href='/weekly_management'">
+                    <i class="fas fa-arrow-left me-2"></i>返回
+                </button>
+                <button type="button" class="btn btn-success ms-2" onclick="exportWeekly()">
+                    <i class="fas fa-file-excel me-2"></i>导出Excel
+                </button>
+            </div>
+        </div>
+        
+        <div class="card-body p-0">
+            <form method="POST">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th style="width:25%">部门</th>
+                                <th style="width:15%">姓名</th>
+                                <th style="width:35%">本周工作</th>
+                                <th style="width:35%">下周计划</th>
+                                <th style="width:10%">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% set dept_counts = {} %}
+                            {% for u in users if not u.is_leader %}  <!-- 添加领导判断 -->
+                                {% if u.department not in dept_counts %}
+                                    {% set _ = dept_counts.update({u.department: 1}) %}
+                                {% else %}
+                                    {% set _ = dept_counts.update({u.department: dept_counts[u.department] + 1}) %}
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% set processed_depts = [] %}
+                            {% for u in users if not u.is_leader %}  <!-- 添加领导过滤 -->
+                            {% set report = current_reports.get(u.id) %}
+                            <tr class="{% if report and report.department_submitted %}submitted-row{% elif report and not report.department_submitted and check_permission(user, u) %}unedited-row{% endif %}">
+                                {% if u.department not in processed_depts %}
+                                <td rowspan="{{ dept_counts[u.department] }}">{{ u.department }}</td>
+                                {% set _ = processed_depts.append(u.department) %}
+                                {% endif %}
+                                <td>{{ u.username }}</td>
+                                <td>
+                                    <textarea class="form-control" 
+                                             name="current_work_{{ u.id }}" 
+                                             {% if report %} 
+                                                 {% if report.department_submitted or (report.submitted and not check_permission(user, u)) %}
+                                                     disabled
+                                                 {% endif %}
+                                             {% endif %}>{{ report.current_work if report else '' }}</textarea>
+                                </td>
+                                <td>
+                                    <textarea class="form-control" 
+                                             name="next_plan_{{ u.id }}" 
+                                             {% if report %} 
+                                                 {% if report.department_submitted or (report.submitted and not check_permission(user, u)) %}
+                                                     disabled
+                                                 {% endif %}
+                                             {% endif %}>{{ report.next_plan if report else '' }}</textarea>
+                                </td>
+                                <td class="text-center">
+                                    {% if check_permission(user, u) or u.id == user.id %}
+                                        <button type="submit" 
+                                                name="submit_{{ u.id }}" 
+                                                class="btn btn-sm {% if report and report.department_submitted %}btn-success{% else %}btn-primary{% endif %} py-1 px-2"
+                                                {% if report and report.department_submitted %}disabled{% endif %}>
+                                            {{ '已确认' if report and report.department_submitted else ('确认提交' if report and report.submitted else '提交') }}
+                                        </button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function exportWeekly() {
+    const link = document.createElement('a');
+    link.href = '/export_weekly';
+    link.download = `周报_${new Date().toLocaleDateString()}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+</script>
+{% endblock %}

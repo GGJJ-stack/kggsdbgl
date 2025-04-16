@@ -1,0 +1,20 @@
+<html>
+<head>
+    <title>导入用户</title>
+</head>
+<body>
+    <h1>导入用户数据</h1>
+    <form method="post" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".xlsx">
+        <button type="submit">上传</button>
+    </form>
+    <button onclick="window.location.href='/user_management'">返回</button>
+    
+    <h3>Excel文件格式要求：</h3>
+    <ul>
+        <li>必须包含以下列：用户名、密码、部门、电话</li>
+        <li>可选布尔列（True/False）：管理员、部门信息员、部门负责人、公司信息员、综合部负责人、公司领导</li>
+        <li>文件扩展名必须为.xlsx</li>
+    </ul>
+</body>
+</html>

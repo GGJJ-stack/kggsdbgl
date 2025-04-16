@@ -1,172 +1,146 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>控股公司督办管理系统</title>
+    <title>主页 - {{ username }}</title>
     <style>
         :root {
-            --primary-color: #6C8EBF; /* 莫兰迪蓝主色 */
-            --secondary-color: #D79B77; /* 莫兰迪橙跳色 */
-            --text-color: #4A5568; /* 深灰蓝文本 */
-            --background-gradient: linear-gradient(135deg, #f8f9fa 0%, #ecf0f1 100%);
-            --nav-bg: rgba(255, 255, 255, 0.98);
-            --border-color: #CBD5E0;
+            --primary: #6C7A89;         /* 莫兰迪蓝 */
+            --accent: #D99A6C;         /* 莫兰迪橙 */
+            --bg: #F5F7FA;
+            --text: #2C3E50;
         }
 
         body {
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            background: var(--background-gradient);
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #f8f9fb 0%, #e9ecef 100%);
             margin: 0;
-            padding: 2rem;
-            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text);
+            line-height: 1.6;
         }
 
-        .container {
+        .dashboard {
+            width: 90%;
             max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        nav {
-            background: var(--nav-bg);
-            padding: 1rem 2.5rem;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(108, 142, 191, 0.15);
-            margin-bottom: 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border: 1px solid var(--border-color);
-        }
-
-        .main-nav {
-            display: flex;
-            gap: 1.5rem;
-            flex-wrap: wrap;
-        }
-
-        .nav-link {
-            color: var(--primary-color);
-            text-decoration: none;
-            padding: 0.6rem 1.2rem;
-            border-radius: 8px;
-            transition: all 0.3s ease;
-            background: rgba(108, 142, 191, 0.1);
-            border: 2px solid var(--border-color);
-            font-weight: 500;
-        }
-
-        .nav-link:hover {
-            background: var(--secondary-color);
-            color: white;
-            transform: translateY(-2px);
-            box-shadow: 0 3px 8px rgba(215, 155, 119, 0.3);
-            border-color: transparent;
-        }
-
-        .user-nav {
-            display: flex;
-            gap: 1.2rem;
-            align-items: center;
-        }
-
-        .admin-badge {
-            background: var(--primary-color);
-            color: white;
-            padding: 0.3rem 1rem;
+            background: white;
             border-radius: 20px;
-            font-size: 0.9em;
-            position: relative;
-            padding-right: 2.2em;
+            padding: 50px 40px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.1);
+            margin: 30px;
         }
 
-        .admin-badge::after {
-            content: "⚙️";
-            position: absolute;
-            right: 0.6em;
-            top: 50%;
-            transform: translateY(-50%);
+        .welcome {
+            text-align: center;
+            margin-bottom: 60px;
         }
 
         h1 {
-            color: var(--primary-color);
-            text-align: center;
-            margin-bottom: 2rem;
-            font-size: 2.5rem;
-            letter-spacing: 1px;
+            color: var(--primary);
+            font-size: 3rem;
+            margin: 0 0 15px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
         }
 
-        .content-container {
-            background: var(--nav-bg);
-            border-radius: 12px;
-            box-shadow: 0 6px 15px rgba(108, 142, 191, 0.1);
-            padding: 2.5rem;
-            margin-top: 1.5rem;
-            border: 1px solid var(--border-color);
+        .welcome p {
+            color: var(--primary);
+            font-size: 1.3rem;
+            opacity: 0.9;
+            margin: 0;
         }
 
-        .status-bar {
-            height: 4px;
-            background: linear-gradient(90deg, 
-                var(--primary-color) 30%, 
-                var(--secondary-color) 70%);
-            margin-bottom: 2rem;
-            border-radius: 2px;
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 25px;
+            padding: 0 15px;
         }
+
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: linear-gradient(145deg, var(--primary) 0%, #5C6B7A 100%);
+            color: white !important;
+            border-radius: 15px;
+            text-decoration: none;
+            font-size: 1.15rem;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            height: 100px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+            background: linear-gradient(145deg, var(--accent) 0%, #C98A5C 100%);
+        }
+
+        .btn::before {
+            content: "";
+            display: inline-block;
+            width: 28px;
+            height: 28px;
+            margin-right: 15px;
+            background-size: contain;
+            filter: drop-shadow(0 1px 1px rgba(0,0,0,0.1));
+        }
+
+        .btn-logout {
+            background: linear-gradient(145deg, var(--accent) 0%, #C98A5C 100%) !important;
+            grid-column: 1 / -1;
+            height: 70px;
+            margin-top: 30px;
+            font-weight: 500;
+        }
+
+        /* 按钮图标 */
+        .btn:nth-child(1)::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="white" d="M13 13v8h-2v-8H3v-2h8V3h2v8h8v2z"/></svg>'); }
+        .btn:nth-child(2)::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="white" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>'); }
+        .btn:nth-child(3)::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="white" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>'); }
+        .btn:nth-child(4)::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="white" d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>'); }
+        .btn:nth-child(5)::before { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="white" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>'); }
 
         @media (max-width: 768px) {
-            nav {
-                flex-direction: column;
-                gap: 1rem;
-                padding: 1.2rem;
+            .dashboard {
+                width: 95%;
+                padding: 40px 20px;
             }
-            
-            .main-nav {
-                justify-content: center;
-                gap: 1rem;
+            h1 {
+                font-size: 2.4rem;
             }
-            
-            .nav-link {
-                font-size: 0.9rem;
-                padding: 0.5rem 1rem;
+            .btn {
+                font-size: 1.05rem;
+                height: 90px;
+                padding: 15px;
+            }
+            .grid {
+                gap: 15px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <nav>
-            <div class="main-nav">
-                <a href="{{ url_for('unfinished_projects') }}" class="nav-link">未完成项目</a>
-                <a href="{{ url_for('finished_projects') }}" class="nav-link">已完成项目</a>
-                <a href="{{ url_for('all_projects') }}" class="nav-link">全部项目</a>
-            </div>
+    <div class="dashboard">
+        <div class="welcome">
+            <h1>{{ username }}</h1>
+            <p>欢迎使用计划和督办管理平台</p>
+        </div>
 
-            <div class="user-nav">
-                {% if session.get('is_admin') %}
-                <form class="admin-form" action="{{ url_for('user_management') }}" method="POST">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="nav-link admin-badge">用户管理</button>
-                </form>
-                {% endif %}
-                
-                <form class="profile-form" action="{{ url_for('profile') }}" method="POST">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="nav-link">个人资料</button>
-                </form>
-
-                <form action="{{ url_for('logout') }}" method="POST">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="nav-link">退出登录</button>
-                </form>
-            </div>
-        </nav>
-
-        <div class="status-bar"></div>
-
-        <div class="content-container">
-            <h2>欢迎使用督办管理系统</h2>
-            <p>当前系统状态：运行正常 | 今日日期：{{ current_datetime.strftime('%Y-%m-%d') }}</p>
+        <div class="grid">
+            <a href="/weekly_management" class="btn">周报管理</a>
+            <a href="/plan_management" class="btn">计划管理</a>
+            <a href="/supervision" class="btn">督办管理</a>
+            {% if is_admin %}
+            <a href="/user_management" class="btn">用户管理</a>
+            {% endif %}
+            <a href="/user_profile" class="btn">个人中心</a>
+            <a href="/logout" class="btn btn-logout">退出系统</a>
         </div>
     </div>
 </body>

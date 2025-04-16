@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>个人中心</title>
+    <style>
+        :root {
+            --morandi-blue: #6B8B9B;
+            --morandi-orange: #D9976A;
+            --background: #F0F4F7;
+            --text-primary: #2C3E50;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background);
+            margin: 0;
+            padding: 40px 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        h2 {
+            color: var(--morandi-blue);
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        form div {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            color: var(--text-primary);
+            font-weight: 500;
+            font-size: 16px;
+        }
+
+        input {
+            padding: 12px;
+            border: 2px solid var(--morandi-blue);
+            border-radius: 6px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        input:focus {
+            border-color: var(--morandi-orange);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(217, 151, 106, 0.2);
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        button[type="submit"] {
+            background-color: var(--morandi-orange);
+            color: white;
+            margin-top: 10px;
+        }
+
+        button[type="submit"]:hover {
+            background-color: #C8855A;
+        }
+
+        .return-btn {
+            display: block;
+            width: max-content;
+            margin: 20px auto 0;
+            background-color: var(--morandi-blue);
+            color: white;
+            text-decoration: none;
+            text-align: center;
+            padding: 12px 24px;
+        }
+
+        .return-btn:hover {
+            background-color: #5B7989;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>个人信息修改</h2>
+        <form method="POST">
+            <div>
+                <label>电话号码：</label>
+                <input type="text" name="phone" value="{{ phone }}" required>
+            </div>
+            <div>
+                <label>登录密码：</label>
+                <input type="password" name="password" value="{{ password }}" required>
+            </div>
+            <button type="submit">提交修改</button>
+        </form>
+        <a href="/home" class="return-btn">返回首页</a>
+    </div>
+</body>
+</html>
