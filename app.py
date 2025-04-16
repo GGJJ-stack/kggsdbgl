@@ -16,27 +16,23 @@ from io import BytesIO
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func, text
 from flask_migrate import Migrate
-from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
 
-SQLALCHEMY_DATABASE_URI = "mysql+pymysql://kggsdbgl:91jing04ji17WA#@127.0.0.1:3306/kggsdbgl"
-
-# 初始化Flask应用
+# 初始化Flask应用实例
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
-# 生产环境配置
+# 配置SQLite数据库
+basedir = os.path.abspath(os.path.dirname(__file__))
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-production-secret-key')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
-    'DATABASE_URL',
-    'mysql+pymysql://user:password@localhost/prod_db?charset=utf8mb4'
-)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'data.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB文件上传限制
-app.config['UPLOAD_FOLDER'] = '/var/www/uploads'
-ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
+app.config['UPLOAD_FOLDER'] = os.path.join(basedir, 'uploads')
 
-# 初始化数据库
+# 确保目录存在
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+# 初始化数据库扩展
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
@@ -57,7 +53,7 @@ if not app.debug:
     app.logger.setLevel(logging.INFO)
     app.logger.info('Application startup')
 
-# 数据库模型
+# 数据库模型（保持原样）
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), unique=True, nullable=False)
@@ -251,7 +247,7 @@ scheduler.add_job(check_overdue_projects, 'cron', hour=0)
 scheduler.add_job(transfer_weekly_reports, 'cron', day_of_week='sun', hour=12)
 scheduler.start()
 
-# 辅助函数
+# 辅助函数（保持原样）
 def valid_approver():
     user = User.query.filter_by(username=session['user']).first()
     return user.is_admin or user.is_company_leader
@@ -1422,14 +1418,25 @@ def export_company_weekly_archive(archive_time):
         flash(f'导出失败: {str(e)}', 'error')
         return redirect(url_for('company_weekly_history'))
 
-def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
+# 初始化数据库
 with app.app_context():
     db.create_all()
+    db.session.execute(text('PRAGMA foreign_keys = ON'))
+    db.session.commit()
+    
     if not User.query.filter_by(username='admin').first():
-        admin = User(username='admin', password='admin23gg', is_admin=True)
+        admin = User(
+            username='admin',
+            password='admin23gg',
+            is_admin=True,
+            department='管理部',
+            is_company_info=True,
+            is_general_dept_head=True
+        )
         db.session.add(admin)
         db.session.commit()
 
