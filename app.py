@@ -16,6 +16,10 @@ from io import BytesIO
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func, text
 from flask_migrate import Migrate
+from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+
+SQLALCHEMY_DATABASE_URI = "mysql+pymysql://kggsdbgl:91jing04ji17WA#@127.0.0.1:3306/kggsdbgl"
 
 # 初始化Flask应用
 app = Flask(__name__, static_folder='static', template_folder='templates')
