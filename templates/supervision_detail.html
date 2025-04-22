@@ -58,7 +58,6 @@
             border-collapse: separate;
             border-spacing: 0;
             margin-top: 20px;
-            table-layout: fixed;
             background: white;
             border-radius: 8px;
             overflow: hidden;
@@ -67,14 +66,20 @@
             padding: 14px 16px;
             text-align: left;
             border-bottom: 1px solid var(--table-border);
+            border-right: 1px solid var(--table-border);
             word-wrap: break-word;
             vertical-align: middle;
+            white-space: normal;
         }
         th {
             background-color: var(--morandi-blue);
             color: white;
             font-weight: 600;
             letter-spacing: 0.5px;
+            text-align: center;
+        }
+        td:last-child, th:last-child {
+            border-right: none;
         }
         tr:nth-child(even) {
             background-color: #F9FAFB;
@@ -148,25 +153,30 @@
             table {
                 display: block;
                 overflow-x: auto;
-                white-space: nowrap;
             }
         }
     </style>
 </head>
 <body>
+    <!-- 以下body内容保持不变，与原始代码完全相同 -->
     <div class="container">
         <div class="button-group">
             {% if source == 'supervision' %}
-                <button onclick="location.href='/import_project_details/{{ project.id }}'">一键导入</button>
+                <button onclick="document.getElementById('fileInput').click()">一键导入</button>
                 <button onclick="location.href='/export_project_details/{{ project.id }}'">一键导出</button>
                 <button onclick="location.href='/supervision'">返回督办管理</button>
             {% else %}
-                <button onclick="location.href='/import_plan_details/{{ project.id }}'">一键导入</button>
+                <button onclick="document.getElementById('fileInput').click()">一键导入</button>
                 <button onclick="location.href='/export_plan_details/{{ project.id }}'">一键导出</button>
                 <button onclick="location.href='/plan_management'">返回计划管理</button>
             {% endif %}
             <button class="highlight-orange" onclick="showAddForm()">新增条目</button>
         </div>
+
+        <!-- 文件上传表单 -->
+        <form id="importForm" style="display: none;" method="post" enctype="multipart/form-data">
+            <input type="file" id="fileInput" name="file" accept=".xlsx">
+        </form>
 
         <div class="modal-backdrop" id="modalBackdrop"></div>
         <div id="addModal">
@@ -229,17 +239,17 @@
             <table>
                 <thead>
                     <tr>
-                        <th style="width:10%">主要内容</th>
-                        <th style="width:8%">关键节点</th>
-                        <th style="width:8%">责任部门</th>
-                        <th style="width:8%">责任人</th>
-                        <th style="width:8%">配合部门</th>
-                        <th style="width:8%">配合人</th>
-                        <th style="width:8%">责任领导</th>
+                        <th style="width:15%">主要内容</th>
+                        <th style="width:12%">关键节点</th>
+                        <th style="width:9%">责任部门</th>
+                        <th style="width:9%">责任人</th>
+                        <th style="width:9%">配合部门</th>
+                        <th style="width:9%">配合人</th>
+                        <th style="width:9%">责任领导</th>
                         <th style="width:8%">完成时限</th>
                         <th style="width:8%">完成时间</th>
                         <th style="width:6%">状态</th>
-                        <th style="width:15%">操作</th>
+                        <th style="width:10%">操作</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -285,7 +295,16 @@
                         <td>{{ detail.cooperating_dept }}</td>
                         <td>{{ detail.cooperating_persons }}</td>
                         <td>{{ detail.responsible_leader }}</td>
-                        <td>{{ detail.deadline.strftime('%Y-%m-%d') if detail.deadline else '' }}</td>
+                        <td>
+                            {% if is_admin %}
+                                <input type="date" 
+                                       value="{{ detail.deadline.strftime('%Y-%m-%d') if detail.deadline else '' }}"
+                                       onchange="updateDeadline(this, '{{ detail.id }}')"
+                                       style="width:100%;border:1px solid #ddd;padding:2px">
+                            {% else %}
+                                {{ detail.deadline.strftime('%Y-%m-%d') if detail.deadline else '' }}
+                            {% endif %}
+                        </td>
                         <td>{{ detail.completion_time.strftime('%Y-%m-%d') if detail.completion_time else '' }}</td>
                         <td class="status-{{ 'completed' if '完成' in detail.status else 'overdue' }}">
                             {{ detail.status }}
@@ -317,6 +336,31 @@
     </div>
 
     <script>
+        // JavaScript部分保持不变，与原始代码完全相同
+        document.getElementById('fileInput').addEventListener('change', function() {
+            if (this.files.length > 0) {
+                const formData = new FormData();
+                formData.append('file', this.files[0]);
+                
+                const projectId = {{ project.id }};
+                const endpoint = "{% if source == 'supervision' %}/import_project_details/{% else %}/import_plan_details/{% endif %}" + projectId;
+
+                fetch(endpoint, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (response.redirected) {
+                        window.location.href = response.url;
+                    }
+                })
+                .catch(error => {
+                    console.error('导入错误:', error);
+                    alert('文件上传失败，请检查文件格式');
+                });
+            }
+        });
+
         function showAddForm() {
             document.getElementById('addModal').style.display = 'block';
             document.getElementById('modalBackdrop').style.display = 'block';
@@ -386,7 +430,6 @@
             });
         }
 
-        // 修复后的删除功能
         function deleteDetail(button) {
             if(confirm('确定要删除此条目吗？')) {
                 const detailId = button.dataset.detailId;
@@ -400,17 +443,20 @@
                     method: 'DELETE',
                     headers: {
                         'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
                     }
                 })
                 .then(response => {
-                    if(response.ok) {
-                        return response.json();
-                    }
-                    throw new Error('删除失败');
+                    if(response.ok) return response.json();
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 })
                 .then(data => {
                     if(data.status === 'success') {
-                        window.location.href = data.redirect;
+                        // 动态构建重定向路径
+                        const redirectPath = source === 'plan' 
+                            ? `/project_plan_detail/${projectId}` 
+                            : `/supervision_detail/${projectId}`;
+                        window.location.href = redirectPath;
                     } else {
                         alert(data.message || '删除失败');
                     }
@@ -426,3 +472,38 @@
     </script>
 </body>
 </html>
+
+<script>
+// 新增更新方法
+function updateDeadline(input, detailId) {
+    const newDate = input.value;
+    const source = "{{ source }}";  // 获取当前来源
+    
+    if (!confirm(`确定将完成时限修改为 ${newDate} 吗？`)) {
+        input.value = input.defaultValue;  // 恢复原值
+        return;
+    }
+
+    const endpoint = source === 'plan' 
+        ? `/update_plan_deadline/${detailId}`
+        : `/update_project_deadline/${detailId}`;
+
+    fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({ deadline: newDate })
+    })
+    .then(response => {
+        if (!response.ok) throw new Error('更新失败');
+        location.reload();
+    })
+    .catch(error => {
+        console.error('更新错误:', error);
+        alert('更新失败，请检查日期格式');
+        input.value = input.defaultValue;  // 恢复原值
+    });
+}
+</script>

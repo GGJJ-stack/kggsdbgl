@@ -123,8 +123,10 @@
         
         <div class="button-group">
             <a href="/home" class="btn btn-primary">返回主菜单</a>
+            <!-- 新增按钮 -->
             <button onclick="showForm('project')" class="btn btn-accent">新增项目类计划</button>
             <button onclick="showForm('time')" class="btn btn-accent">新增时间类计划</button>
+            <button onclick="showForm('other')" class="btn btn-accent">新增其他类计划</button>
         </div>
 
         <!-- 新增计划表单 -->
@@ -140,14 +142,20 @@
                 <button type="submit" class="btn btn-accent">创建</button>
             </form>
         </div>
+        <div id="otherForm" class="form-container">
+            <form method="POST" action="/add_other_plan">
+                <input type="text" name="plan_name" placeholder="计划名称" required>
+                <button type="submit" class="btn btn-accent">创建</button>
+            </form>
+        </div>
 
         <!-- 计划列表 -->
         <table>
             <thead>
                 <tr>
-                    <th style="width:50%">计划名称</th>  <!-- 原始无宽度设置，调整为50% -->
-                    <th style="width:30%">类别</th>     <!-- 原始无宽度设置，调整为30% -->
-                    <th style="width:20%">操作</th>     <!-- 原始无宽度设置，调整为20% -->
+                    <th style="width:50%">计划名称</th>  
+                    <th style="width:30%">类别</th>     
+                    <th style="width:20%">操作</th>     
                 </tr>
             </thead>
             <tbody>
@@ -166,8 +174,19 @@
                     <td>{{ plan.plan_name }}</td>
                     <td>{{ plan.category }}</td>
                     <td>
-                        <button onclick="location.href='/time_plan_detail/{{ plan.id }}'" class="btn btn-primary">详情</button>
+                        <button onclick="location.href='/time_plan/{{ plan.id }}'" class="btn btn-primary">详情</button>
                         <button onclick="location.href='/delete_time_plan/{{ plan.id }}'" class="btn btn-accent">删除</button>
+                    </td>
+                </tr>
+                {% endfor %}
+                <!-- 新增其他类计划显示 -->
+                {% for plan in other_plans %}
+                <tr>
+                    <td>{{ plan.plan_name }}</td>
+                    <td>{{ plan.category }}</td>
+                    <td>
+                        <button onclick="location.href='/other_plan_detail/{{ plan.id }}'" class="btn btn-primary">详情</button>
+                        <button onclick="location.href='/delete_other_plan/{{ plan.id }}'" class="btn btn-accent">删除</button>
                     </td>
                 </tr>
                 {% endfor %}
@@ -179,8 +198,11 @@
         function showForm(type) {
             document.getElementById('projectForm').style.display = 'none';
             document.getElementById('timeForm').style.display = 'none';
+            document.getElementById('otherForm').style.display = 'none';
+            
             if(type === 'project') document.getElementById('projectForm').style.display = 'block';
             if(type === 'time') document.getElementById('timeForm').style.display = 'block';
+            if(type === 'other') document.getElementById('otherForm').style.display = 'block';
         }
     </script>
 </body>

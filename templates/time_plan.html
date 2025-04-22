@@ -1,0 +1,267 @@
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="mb-3 d-flex justify-content-between align-items-center">
+        <h2 class="mb-0 text-primary">时间类计划管理</h2>
+        <div>
+            <a href="/plan_management" class="btn btn-secondary">返回计划管理</a>
+            <button id="export-btn" class="btn btn-warning">一键导出</button>
+            <label for="file-input" class="btn btn-primary mb-0">
+                一键导入
+                <input type="file" id="file-input" accept=".xlsx" style="display: none;">
+            </label>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-hover table-bordered text-center">
+            <thead class="table-primary">
+                <tr>
+                    <th style="min-width: 50px;">序号</th>
+                    <th style="min-width: 300px;">集团下发月度计划节点</th>
+                    <th style="min-width: 120px;">责任领导</th>
+                    <th style="min-width: 120px;">责任部门</th>
+                    <th style="min-width: 120px;">配合部门</th>
+                    <th style="min-width: 150px;">预计完成时间</th>
+                    <th style="min-width: 150px;">实际完成时间</th>
+                    <th style="min-width: 300px;">进展情况</th>
+                    <th style="min-width: 300px;">存在问题</th>
+                    <th style="min-width: 130px;">当月是否完成</th>
+                    <th style="min-width: 100px;">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for detail in details %}
+                <tr data-id="{{ detail.id }}" style="background-color: {{ detail.bg_color if detail.bg_color else '' }};">
+                    <td>{{ loop.index }}</td>
+                    <td>{{ detail.plan_node }}</td>
+                    <td>{{ detail.responsible_leader }}</td>
+                    <td>{{ detail.responsible_dept }}</td>
+                    <td>{{ detail.cooperating_dept }}</td>
+                    <td>
+                        {% if current_user.is_admin %}
+                        <input type="date" class="expected-deadline form-control form-control-sm" 
+                               value="{{ detail.expected_deadline.strftime('%Y-%m-%d') if detail.expected_deadline else '' }}">
+                        {% else %}
+                        {{ detail.expected_deadline|default('', true) }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if current_user.is_admin %}
+                        <input type="date" class="actual-completion form-control form-control-sm" 
+                               value="{{ detail.actual_completion if detail.actual_completion else '' }}">
+                        {% else %}
+                        {{ detail.actual_completion|default('', true) }}
+                        {% endif %}
+                    </td>
+                    <td contenteditable="{{ 'true' if can_edit else 'false' }}" 
+                        class="editable progress">{{ detail.progress }}</td>
+                    <td contenteditable="{{ 'true' if can_edit else 'false' }}" 
+                        class="editable issues">{{ detail.issues }}</td>
+                    <td>
+                        {% if current_user.is_admin %}
+                        <select class="completion-status form-select form-select-sm">
+                            <option value="true" {{ 'selected' if detail.is_completed }}>是</option>
+                            <option value="false" {{ 'selected' if not detail.is_completed }}>否</option>
+                        </select>
+                        {% else %}
+                        {{ '是' if detail.is_completed else '否' }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if current_user.is_admin %}
+                        <button class="btn btn-danger btn-sm delete-btn">删除</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 处理完成状态变化
+    document.querySelectorAll('.completion-status').forEach(select => {
+        select.addEventListener('change', function() {
+            const row = this.closest('tr');
+            const isCompleted = this.value === 'true';
+            row.style.backgroundColor = isCompleted ? '' : '#FFE4B5';  
+            
+            fetch(`/update_time_plan/${row.dataset.id}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `is_completed=${isCompleted}`
+            }).catch(error => console.error('更新失败:', error));
+        });
+    });
+
+    document.querySelectorAll('.actual-completion').forEach(input => {
+        input.addEventListener('change', function() {
+            const formData = new FormData();
+            formData.append('actual_completion', this.value);
+            
+            fetch(`/update_time_plan/${this.closest('tr').dataset.id}`, {
+                method: 'POST',
+                body: formData
+            }).catch(error => console.error('日期更新失败:', error));
+        });
+    });
+
+    document.querySelectorAll('.editable').forEach(cell => {
+        cell.addEventListener('blur', function() {
+            const field = this.classList.contains('progress') ? 'progress' : 'issues';
+            const formData = new FormData();
+            formData.append(field, this.innerText);
+            
+            fetch(`/update_time_plan/${this.closest('tr').dataset.id}`, {
+                method: 'POST',
+                body: formData
+            }).catch(error => console.error('内容更新失败:', error));
+        });
+    });
+
+    document.querySelectorAll('.delete-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            if (confirm('确认删除该条目？')) {
+                fetch(`/delete_time_plan_row/${this.closest('tr').dataset.id}`, {
+                    method: 'DELETE'
+                }).then(response => {
+                    if (response.ok) {
+                        this.closest('tr').remove();
+                    }
+                }).catch(error => console.error('删除失败:', error));
+            }
+        });
+    });
+
+    document.getElementById('file-input').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        fetch('/import_time_plan', {
+            method: 'POST',
+            body: formData
+        }).then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                window.location.reload();
+            } else {
+                alert(data.error || '导入失败');
+            }
+        }).catch(error => console.error('导入失败:', error));
+    });
+
+    document.getElementById('export-btn').addEventListener('click', function() {
+        window.location.href = '/export_time_plan';
+    });
+});
+
+document.querySelectorAll('.expected-deadline').forEach(input => {
+    input.addEventListener('change', function() {
+        const formData = new FormData();
+        formData.append('expected_deadline', this.value);
+        
+        fetch(`/update_time_plan/${this.closest('tr').dataset.id}`, {
+            method: 'POST',
+            body: formData
+        }).catch(error => console.error('预计完成时间更新失败:', error));
+    });
+});
+
+document.querySelectorAll('.completion-status').forEach(select => {
+    const isCompleted = select.value === 'true';
+    const row = select.closest('tr');
+    row.style.backgroundColor = isCompleted ? '' : '#FFE4B5';
+});
+</script>
+
+<style>
+:root {
+    --ml-blue: #3F5468;
+    --ml-orange: #DAA520;
+}
+
+.btn {
+    padding: 8px 16px;
+    font-size: 14px;
+    min-width: 100px;
+}
+
+.btn-primary {
+    background-color: var(--ml-blue);
+    border-color: var(--ml-blue);
+}
+
+.btn-primary:hover {
+    background-color: #2E3A4A;
+    border-color: #2E3A4A;
+}
+
+.btn-warning {
+    background-color: var(--ml-orange);
+    border-color: var(--ml-orange);
+    color: white;
+}
+
+.btn-warning:hover {
+    background-color: #BF7E4A;
+    border-color: #BF7E4A;
+    color: white;
+}
+
+.table-primary th {
+    background-color: var(--ml-blue);
+    color: white;
+}
+
+.table-bordered th,
+.table-bordered td {
+    border: 1px solid var(--ml-blue) !important;
+    vertical-align: middle;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(63, 84, 104, 0.1);
+}
+
+.editable {
+    min-width: 300px;
+    text-align: left;
+    padding: 8px 12px !important;
+}
+
+.form-control-sm,
+.form-select-sm {
+    margin: 0 auto;
+    width: 95%;
+}
+
+.delete-btn {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.table-responsive {
+    border: 1px solid var(--ml-blue);
+    border-radius: 5px;
+    margin-top: 20px;
+    overflow: hidden;
+    padding: 0;
+    overflow-x: auto;  /* 新增水平滚动条 */
+}
+
+@media (max-width: 768px) {
+    .table-responsive {
+        border-left: none;
+        border-right: none;
+        border-radius: 0;
+    }
+}
+</style>
+{% endblock %}

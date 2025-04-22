@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ plan.plan_name }} - 计划详情</title>
+    <link rel="stylesheet" href="https://unpkg.com/vue-multiselect@2.1.6/dist/vue-multiselect.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* 新增容器样式 */
+        .container-fluid {
+            max-width: 100%;
+            padding: 0 15px;
+        }
+        
+        /* 修改表格容器样式 */
+        .table-responsive {
+            position: relative; /* 移除绝对定位 */
+            height: auto; /* 改为自动高度 */
+            max-height: 65vh; /* 最大高度保持可视 */
+            margin-top: 20px; /* 增加顶部间距 */
+        }
+        
+        /* 调整父容器样式 */
+        .table-wrapper {
+            position: relative;
+            height: auto; /* 改为自动高度 */
+            min-height: 400px; /* 恢复为较小默认高度 */
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- 上传进度提示 -->
+        <div v-if="uploadProgress.show" class="alert" 
+             :class="{
+                'alert-info': uploadProgress.status === 'uploading',
+                'alert-success': uploadProgress.status === 'success',
+                'alert-danger': uploadProgress.status === 'error'
+             }">
+            [[ uploadProgress.message ]]
+            <div v-if="uploadProgress.status === 'uploading'" class="mt-2">
+                <div class="progress">
+                    <div class="progress-bar" 
+                         :style="{width: uploadProgress.percent + '%'}">
+                        [[ uploadProgress.percent ]]%
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 操作人员设置模态框 -->
+        <div v-if="showOperatorsModal" class="operators-modal">
+            <div class="mb-3">
+                <h5>设置操作人员</h5>
+                <multiselect
+                    v-model="selectedOperators"
+                    :options="allUsers"
+                    :multiple="true"
+                    label="username"
+                    track-by="username"
+                    placeholder="选择操作人员">
+                </multiselect>
+                <div class="mt-3">
+                    <button class="btn btn-primary btn-sm" @click="saveOperators">保存</button>
+                    <button class="btn btn-secondary btn-sm ml-2" @click="showOperatorsModal = false">取消</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 修改容器为container-fluid -->
+        <div class="container-fluid mt-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>{{ plan.plan_name }}</h1>
+                <div>
+                    <a href="/plan_management" class="btn btn-outline-secondary">返回计划管理</a>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <div class="btn-group">
+                    <button class="btn btn-primary" @click="addRow">
+                        <i class="bi bi-plus-circle"></i> 新增条目
+                    </button>
+                    <input type="file" id="excelUpload" hidden 
+                           @change="handleExcelUpload" accept=".xlsx, .xls">
+                    <label for="excelUpload" class="btn btn-success">
+                        <i class="bi bi-upload"></i> 一键导入
+                    </label>
+                    <button class="btn btn-warning" @click="exportExcel">
+                        <i class="bi bi-download"></i> 一键导出
+                    </button>
+                </div>
+            </div>
+
+            <!-- 表格容器保持table-responsive -->
+            <div class="table-wrapper">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 50px; min-width: 50px" class="text-center">序号</th>
+                                <th style="min-width: 150px; width: 150px" class="text-center">任务名称</th>
+                                <th v-for="col in columns" 
+                                    v-if="!['状态','操作权限','操作','任务名称','完成时限','完成时间'].includes(col)"
+                                    style="min-width: 120px; width: 120px" class="text-center">
+                                    [[ col ]]
+                                </th>
+                                <th style="width: 140px; min-width: 140px" class="text-center">完成时限</th>
+                                <th style="width: 140px; min-width: 140px" class="text-center">完成时间</th>
+                                <th style="width: 120px; min-width: 120px" class="text-center">状态</th>
+                                <th style="width: 140px; min-width: 140px" class="text-center">操作权限</th>
+                                <th style="width: 150px; min-width: 150px" class="text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template v-for="(rowGroup, index) in mergedTableData">
+                                <tr v-for="(row, rowIndex) in rowGroup.rows" 
+                                    :key="row.id + '-' + rowIndex"
+                                    :class="{'table-warning': ['逾期','逾期完成'].includes(row.status)}">
+                                    <td v-if="rowIndex === 0" 
+                                        :rowspan="rowGroup.rowspan"
+                                        class="text-center">
+                                        [[ rowGroup.index ]]
+                                    </td>
+                                    <td v-if="rowIndex === 0" 
+                                        :rowspan="rowGroup.rowspan">
+                                        <editable-cell 
+                                            :value="rowGroup.main_content" 
+                                            :row-id="rowGroup.id"
+                                            field="main_content"
+                                            :editable="isEditable(row)"
+                                            @update="handleMainContentUpdate">
+                                        </editable-cell>
+                                    </td>
+                                    
+                                    <td v-for="col in columns" 
+                                        v-if="!['状态','操作权限','操作','任务名称','完成时限','完成时间'].includes(col)">
+                                        <editable-cell 
+                                            :value="row[col]" 
+                                            :row-id="row.id"
+                                            :field="col"
+                                            :editable="isEditable(row)"
+                                            @update="handleCellUpdate">
+                                        </editable-cell>
+                                    </td>
+                                    
+                                    <td>
+                                        <editable-cell 
+                                            :value="row['完成时限']" 
+                                            type="date"
+                                            :row-id="row.id"
+                                            field="完成时限"
+                                            :editable="isEditable(row)"
+                                            @update="handleCellUpdate">
+                                        </editable-cell>
+                                    </td>
+                                    
+                                    <td>
+                                        <span v-if="row.status === '已完成' || row.status === '逾期完成'">
+                                            [[ row['完成时间'] ]]
+                                        </span>
+                                        <editable-cell v-else
+                                            :value="row['完成时间']" 
+                                            type="date"
+                                            :row-id="row.id"
+                                            field="完成时间"
+                                            :editable="isEditable(row)"
+                                            @update="handleCellUpdate">
+                                        </editable-cell>
+                                    </td>
+                                    
+                                    <td :class="{'status-overdue': ['逾期','逾期完成'].includes(row.status)}">
+                                        [[ row.status ]]
+                                    </td>
+                                    <td>
+                                        <a href="#" @click.prevent="showOperatorsModalForRow(row)">
+                                            [[ row.operators.length ]] 人
+                                        </a>
+                                    </td>
+                                    <td class="text-center">
+                                        <button class="btn btn-sm btn-success" 
+                                                @click="completeRow(row)"
+                                                v-if="isAdmin">
+                                            完成
+                                        </button>
+                                        <button class="btn btn-sm btn-danger ml-2" 
+                                                @click="deleteRow(row.id)"
+                                                v-if="isAdmin">
+                                            删除
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://unpkg.com/vue-multiselect@2.1.6"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+    Vue.component('editable-cell', {
+        props: ['value', 'rowId', 'field', 'editable', 'type'],
+        template: `
+            <div @click="handleClick" class="editable-cell position-relative">
+                <input v-if="editing" 
+                       v-model="tempValue" 
+                       @blur="saveChange"
+                       @keyup.enter="saveChange"
+                       @keyup.esc="cancelEdit"
+                       class="edit-input form-control form-control-sm"
+                       ref="input">
+                <span v-else>[[ displayValue ]]</span>
+                <div class="cell-tooltip" v-if="editable">点击编辑</div>
+            </div>
+        `,
+        data() {
+            return {
+                editing: false,
+                tempValue: this.value,
+                originalValue: this.value
+            }
+        },
+        computed: {
+            displayValue() {
+                if (this.value === null || this.value === undefined || this.value === '') return ''
+                if (this.type === 'date') return this.value.slice(0,10)
+                if (typeof this.value === 'object') return JSON.stringify(this.value)
+                return this.value.toString()
+            }
+        },
+        methods: {
+            handleClick() {
+                if (this.editable) {
+                    this.tempValue = this.value || ''
+                    this.editing = true
+                    this.$nextTick(() => {
+                        this.$refs.input.focus()
+                        if (this.type === 'date') {
+                            this.$refs.input.type = 'date'
+                        }
+                    })
+                }
+            },
+            saveChange() {
+                let finalValue = this.tempValue
+                if (this.type === 'date' && finalValue === '') {
+                    finalValue = null
+                }
+                
+                if (finalValue !== this.originalValue) {
+                    this.$emit('update', {
+                        id: this.rowId,
+                        field: this.field,
+                        value: finalValue
+                    })
+                    this.originalValue = finalValue
+                }
+                this.cancelEdit()
+            },
+            cancelEdit() {
+                this.tempValue = this.originalValue
+                this.editing = false
+            }
+        },
+        delimiters: ['[[', ']]']
+    })
+
+    Vue.component('multiselect', window.VueMultiselect.default)
+
+    const app = new Vue({
+        el: '#app',
+        delimiters: ['[[', ']]'],
+        data: {
+            plan: {{ plan.to_dict()|tojson }},
+            tableData: {{ table_data|tojson }},
+            columns: {{ columns|tojson }},
+            uploadProgress: {
+                show: false,
+                status: '',
+                message: '',
+                percent: 0
+            },
+            showOperatorsModal: false,
+            selectedRow: null,
+            selectedOperators: [],
+            allUsers: {{ users|tojson }},
+            currentUser: '{{ current_user }}',
+            mergedTableData: []
+        },
+        computed: {
+            isAdmin() {
+                return {{ is_admin|tojson }}
+            }
+        },
+        watch: {
+            tableData: {
+                handler(newVal) {
+                    this.processMergedData()
+                },
+                deep: true
+            }
+        },
+        mounted() {
+            this.processMergedData()
+        },
+        methods: {
+            processMergedData() {
+                const merged = []
+                let groupIndex = 1
+                this.tableData.forEach((group) => {
+                    const rows = group.rows || []
+                    merged.push({
+                        index: groupIndex++,
+                        id: group.id,
+                        main_content: group.main_content,
+                        rows: rows.map(row => ({
+                            ...row,
+                            status: this.calculateStatus(row)
+                        })),
+                        rowspan: rows.length
+                    })
+                })
+                this.mergedTableData = merged
+            },
+            calculateStatus(row) {
+                if (!row['完成时间']) {
+                    if (row['完成时限'] && new Date(row['完成时限']) < new Date()) {
+                        return '逾期'
+                    }
+                    return '进行中'
+                } else {
+                    if (row['完成时限'] && new Date(row['完成时间']) > new Date(row['完成时限'])) {
+                        return '逾期完成'
+                    }
+                    return '已完成'
+                }
+            },
+            isEditable(row) {
+                return this.isAdmin || row.operators.includes(this.currentUser)
+            },
+            handleMainContentUpdate(payload) {
+                axios.post(`/update_other_plan/${payload.id}`, {
+                    data: { '任务名称': payload.value }
+                }).then(response => {
+                    const groupIndex = this.tableData.findIndex(g => g.id === payload.id)
+                    if (groupIndex !== -1) {
+                        this.tableData[groupIndex].main_content = payload.value
+                        this.processMergedData()
+                    }
+                })
+            },
+            handleCellUpdate(payload) {
+                axios.post(`/update_other_plan/${payload.id}`, {
+                    data: { [payload.field]: payload.value }
+                }).then(() => {
+                    this.tableData.forEach(group => {
+                        group.rows.forEach(row => {
+                            if (row.id === payload.id) {
+                                row[payload.field] = payload.value
+                                row.status = this.calculateStatus(row)
+                            }
+                        })
+                    })
+                })
+            },
+            showOperatorsModalForRow(row) {
+                if (!this.isAdmin) return
+                this.selectedRow = row
+                this.selectedOperators = this.allUsers.filter(u => 
+                    row.operators.includes(u.username)
+                )
+                this.showOperatorsModal = true
+            },
+            saveOperators() {
+                const operators = this.selectedOperators.map(u => u.username)
+                axios.post(`/update_other_plan/${this.selectedRow.id}`, {
+                    operators: operators
+                }).then(() => {
+                    this.selectedRow.operators = operators
+                    this.showOperatorsModal = false
+                    this.processMergedData()
+                })
+            },
+            deleteRow(id) {
+                if (confirm('确定删除该条目？')) {
+                    axios.delete(`/delete_other_plan_row/${id}`)
+                        .then(() => {
+                            this.tableData = this.tableData
+                                .map(group => ({
+                                    ...group,
+                                    rows: group.rows.filter(row => row.id !== id)
+                                }))
+                                .filter(group => group.rows.length > 0)
+                            this.processMergedData()
+                        })
+                }
+            },
+            completeRow(row) {
+                const today = new Date().toISOString().split('T')[0]
+                const completionTime = prompt('请输入完成时间（YYYY-MM-DD）：', today)
+                
+                if (!completionTime || !/^\d{4}-\d{2}-\d{2}$/.test(completionTime)) {
+                    alert('日期格式无效，请使用YYYY-MM-DD格式')
+                    return
+                }
+
+                axios.post(`/update_other_plan/${row.id}`, {
+                    data: { '完成时间': completionTime }
+                }).then(() => {
+                    row['完成时间'] = completionTime
+                    row.status = this.calculateStatus(row)
+                    this.processMergedData()
+                }).catch(error => {
+                    alert(error.response?.data?.error || '更新失败')
+                })
+            },
+            addRow() {
+                axios.post(`/add_other_plan_row/${this.plan.id}`)
+                    .then(response => {
+                        const newRow = response.data
+                        this.tableData.push({
+                            id: newRow.id,
+                            main_content: '新任务',
+                            rows: [{
+                                ...newRow,
+                                status: '进行中',
+                                operators: []
+                            }]
+                        })
+                        this.processMergedData()
+                    })
+            },
+            handleExcelUpload(event) {
+                const file = event.target.files[0]
+                const formData = new FormData()
+                formData.append('file', file)
+
+                this.uploadProgress = {
+                    show: true,
+                    status: 'uploading',
+                    message: '正在上传文件...',
+                    percent: 0
+                }
+
+                axios.post(`/import_other_plan/${this.plan.id}`, formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                    onUploadProgress: progressEvent => {
+                        this.uploadProgress.percent = Math.round(
+                            (progressEvent.loaded / progressEvent.total) * 100
+                        )
+                    }
+                }).then(response => {
+                    this.uploadProgress = {
+                        show: true,
+                        status: 'success',
+                        message: '文件上传成功，正在刷新数据...',
+                        percent: 100
+                    }
+                    this.tableData = response.data.data
+                    this.processMergedData()
+                    setTimeout(() => {
+                        this.uploadProgress.show = false
+                    }, 2000)
+                }).catch(error => {
+                    this.uploadProgress = {
+                        show: true,
+                        status: 'error',
+                        message: '文件上传失败：' + (error.response?.data?.error || '服务器错误'),
+                        percent: 0
+                    }
+                })
+            },
+            exportExcel() {
+                window.location.href = `/export_other_plan/${this.plan.id}`
+            }
+        }
+    })
+    </script>
+</body>
+</html>
+
+<style>
+    /* 在head的style区块添加 */
+    :root {
+        --morandi-blue: #4A6FA5;
+        --morandi-light-blue: #8BA8C6;
+        --morandi-orange: #D9975E;
+        --morandi-gray: #F4F4F4;
+    }
+
+    /* 修改按钮颜色 */
+    .btn-primary {
+        background-color: var(--morandi-blue);
+        border-color: var(--morandi-blue);
+    }
+    .btn-primary:hover {
+        background-color: #3A5A85;
+        border-color: #3A5A85;
+    }
+    
+    .btn-warning {
+        background-color: var(--morandi-orange);
+        border-color: var(--morandi-orange);
+        color: white;
+    }
+    .btn-warning:hover {
+        background-color: #C98654;
+        border-color: #C98654;
+    }
+
+    /* 修改表格样式 */
+    .table-light {
+        background-color: var(--morandi-light-blue) !important;
+        /* 移除 color: white; */
+    }
+
+    /* 修复按钮覆盖问题 */
+    .table-wrapper {
+        margin-top: 20px; /* 增加与按钮的间距 */
+        height: calc(100vh - 380px); /* 调整高度计算 */
+    }
+
+    /* 调整状态颜色 */
+    .status-overdue {
+        color: var(--morandi-orange);
+        font-weight: bold;
+    }
+    .table-warning {
+        background-color: rgba(217, 151, 94, 0.1) !important;
+    }
+</style>
+
+<style>
+    .cell-tooltip {
+        position: absolute;
+        right: 5px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 12px;
+        color: #666;
+        opacity: 0;  /* 从 0.3 改为 0 */
+        transition: opacity 0.2s;
+        background: rgba(255,255,255,0.8);
+        padding: 2px 5px;
+        border-radius: 3px;
+    }
+    .editable-cell:hover .cell-tooltip {
+        opacity: 0.9;  /* 保持悬停时的显示效果 */
+    }
+
+    /* 在原有样式基础上添加 */
+    th {
+        vertical-align: middle !important;
+        text-align: center;
+    }
+    td {
+        vertical-align: middle !important;
+    }
+</style>
