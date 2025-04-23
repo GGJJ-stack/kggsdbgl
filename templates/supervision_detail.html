@@ -158,25 +158,30 @@
     </style>
 </head>
 <body>
-    <!-- 以下body内容保持不变，与原始代码完全相同 -->
     <div class="container">
         <div class="button-group">
             {% if source == 'supervision' %}
-                <button onclick="document.getElementById('fileInput').click()">一键导入</button>
+                <button onclick="document.getElementById('supervisionFileInput').click()">一键导入</button>
                 <button onclick="location.href='/export_project_details/{{ project.id }}'">一键导出</button>
                 <button onclick="location.href='/supervision'">返回督办管理</button>
             {% else %}
-                <button onclick="document.getElementById('fileInput').click()">一键导入</button>
+                <button onclick="document.getElementById('planFileInput').click()">一键导入</button>
                 <button onclick="location.href='/export_plan_details/{{ project.id }}'">一键导出</button>
                 <button onclick="location.href='/plan_management'">返回计划管理</button>
             {% endif %}
             <button class="highlight-orange" onclick="showAddForm()">新增条目</button>
         </div>
 
-        <!-- 文件上传表单 -->
-        <form id="importForm" style="display: none;" method="post" enctype="multipart/form-data">
-            <input type="file" id="fileInput" name="file" accept=".xlsx">
+        <!-- 分开处理两种类型的导入表单 -->
+        {% if source == 'supervision' %}
+        <form id="supervisionImportForm" style="display: none;" method="post" enctype="multipart/form-data">
+            <input type="file" id="supervisionFileInput" name="file" accept=".xlsx">
         </form>
+        {% else %}
+        <form id="planImportForm" style="display: none;" method="post" enctype="multipart/form-data">
+            <input type="file" id="planFileInput" name="file" accept=".xlsx">
+        </form>
+        {% endif %}
 
         <div class="modal-backdrop" id="modalBackdrop"></div>
         <div id="addModal">
@@ -336,30 +341,45 @@
     </div>
 
     <script>
-        // JavaScript部分保持不变，与原始代码完全相同
-        document.getElementById('fileInput').addEventListener('change', function() {
-            if (this.files.length > 0) {
-                const formData = new FormData();
-                formData.append('file', this.files[0]);
-                
-                const projectId = {{ project.id }};
-                const endpoint = "{% if source == 'supervision' %}/import_project_details/{% else %}/import_plan_details/{% endif %}" + projectId;
-
-                fetch(endpoint, {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => {
-                    if (response.redirected) {
-                        window.location.href = response.url;
-                    }
-                })
-                .catch(error => {
-                    console.error('导入错误:', error);
-                    alert('文件上传失败，请检查文件格式');
-                });
-            }
+        // 文件上传处理
+        {% if source == 'supervision' %}
+        document.getElementById('supervisionFileInput').addEventListener('change', function() {
+            handleFileUpload(this.files[0], '/import_project_details/{{ project.id }}');
         });
+        {% else %}
+        document.getElementById('planFileInput').addEventListener('change', function() {
+            handleFileUpload(this.files[0], '/import_project_plan_details/{{ project.id }}');
+        });
+        {% endif %}
+
+        function handleFileUpload(file, endpoint) {
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch(endpoint, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.redirected) {
+                    window.location.href = response.url;
+                } else if (response.ok) {
+                    return response.json();
+                }
+                throw new Error('导入失败，请检查文件格式');
+            })
+            .then(data => {
+                if (data.redirect) {
+                    window.location.href = data.redirect;
+                }
+            })
+            .catch(error => {
+                console.error('导入错误:', error);
+                alert(error.message);
+            });
+        }
 
         function showAddForm() {
             document.getElementById('addModal').style.display = 'block';
@@ -431,79 +451,74 @@
         }
 
         function deleteDetail(button) {
-            if(confirm('确定要删除此条目吗？')) {
-                const detailId = button.dataset.detailId;
-                const projectId = button.dataset.projectId;
-                const source = button.dataset.source;
-                const endpoint = source === 'plan' 
-                    ? `/delete_plan_detail/${detailId}`
-                    : `/delete_project_detail/${detailId}`;
+            if(!confirm('确定要删除此条目吗？')) return;
+            
+            const detailId = button.dataset.detailId;
+            const projectId = button.dataset.projectId;
+            const source = button.dataset.source;
+            const endpoint = source === 'plan' 
+                ? `/delete_plan_detail/${detailId}`
+                : `/delete_project_detail/${detailId}`;
 
-                fetch(endpoint, { 
-                    method: 'DELETE',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': '{{ csrf_token }}'
-                    }
-                })
-                .then(response => {
-                    if(response.ok) return response.json();
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                })
-                .then(data => {
-                    if(data.status === 'success') {
-                        // 动态构建重定向路径
-                        const redirectPath = source === 'plan' 
-                            ? `/project_plan_detail/${projectId}` 
-                            : `/supervision_detail/${projectId}`;
-                        window.location.href = redirectPath;
-                    } else {
-                        alert(data.message || '删除失败');
-                    }
-                })
-                .catch(error => {
-                    console.error('删除错误:', error);
-                    alert(error.message || '删除请求失败');
-                });
+            fetch(endpoint, { 
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            })
+            .then(response => {
+                if(response.ok) return response.json();
+                throw new Error(`HTTP error! status: ${response.status}`);
+            })
+            .then(data => {
+                if(data.status === 'success') {
+                    const redirectPath = source === 'plan' 
+                        ? `/project_plan_detail/${projectId}` 
+                        : `/supervision_detail/${projectId}`;
+                    window.location.href = redirectPath;
+                } else {
+                    alert(data.message || '删除失败');
+                }
+            })
+            .catch(error => {
+                console.error('删除错误:', error);
+                alert(error.message || '删除请求失败');
+            });
+        }
+
+        // 新增：动态更新完成时限
+        function updateDeadline(input, detailId) {
+            const newDate = input.value;
+            const source = "{{ source }}";
+            const endpoint = source === 'plan' 
+                ? `/update_plan_deadline/${detailId}`
+                : `/update_project_deadline/${detailId}`;
+
+            if (!confirm(`确定将完成时限修改为 ${newDate} 吗？`)) {
+                input.value = input.defaultValue;
+                return;
             }
+
+            fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ deadline: newDate })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('更新失败');
+                location.reload();
+            })
+            .catch(error => {
+                console.error('更新错误:', error);
+                alert('更新失败，请检查日期格式');
+                input.value = input.defaultValue;
+            });
         }
 
         document.getElementById('modalBackdrop').addEventListener('click', hideAddForm);
     </script>
 </body>
 </html>
-
-<script>
-// 新增更新方法
-function updateDeadline(input, detailId) {
-    const newDate = input.value;
-    const source = "{{ source }}";  // 获取当前来源
-    
-    if (!confirm(`确定将完成时限修改为 ${newDate} 吗？`)) {
-        input.value = input.defaultValue;  // 恢复原值
-        return;
-    }
-
-    const endpoint = source === 'plan' 
-        ? `/update_plan_deadline/${detailId}`
-        : `/update_project_deadline/${detailId}`;
-
-    fetch(endpoint, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': '{{ csrf_token }}'
-        },
-        body: JSON.stringify({ deadline: newDate })
-    })
-    .then(response => {
-        if (!response.ok) throw new Error('更新失败');
-        location.reload();
-    })
-    .catch(error => {
-        console.error('更新错误:', error);
-        alert('更新失败，请检查日期格式');
-        input.value = input.defaultValue;  // 恢复原值
-    });
-}
-</script>

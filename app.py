@@ -235,7 +235,7 @@ class DepartmentWeeklyReport(db.Model):
 class TimePlanDetail(db.Model):
     __tablename__ = 'time_plan_detail'
     id = db.Column(db.Integer, primary_key=True)
-    plan_id = db.Column(db.Integer, db.ForeignKey('time_plan.id'), nullable=False)
+    plan_id = db.Column(db.Integer, db.ForeignKey('time_plan.id'))
     plan_node = db.Column(db.String(200))
     responsible_leader = db.Column(db.String(50))
     responsible_dept = db.Column(db.String(50))
@@ -244,12 +244,13 @@ class TimePlanDetail(db.Model):
     actual_completion = db.Column(db.Date)
     progress = db.Column(db.Text)
     issues = db.Column(db.Text)
-    status = db.Column(db.String(10), default='进行中')  # 新增状态字段
     operators = db.Column(db.String(200))
     bg_color = db.Column(db.String(20), default='#FFFFFF')
+    status = db.Column(db.String(10), default='进行中')
 
-    def __repr__(self):
-        return f'<TimePlanDetail {self.plan_node}>'
+    @property
+    def is_completed(self):
+        return self.status in ('已完成', '逾期完成')
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'xlsx', 'xls'}
@@ -873,6 +874,140 @@ def import_project_details(project_id):
         app.logger.error(f"文件处理失败: {str(e)}", exc_info=True)
         return jsonify({"error": f"文件处理失败: {str(e)}"}), 500
 
+# 在路由部分添加以下新的导入处理函数
+@app.route('/import_project_plan_details/<int:plan_id>', methods=['POST'])
+def import_project_plan_details(plan_id):
+    if 'user' not in session or not session.get('is_admin'):
+        return jsonify({"error": "Unauthorized operation"}), 401
+    
+    if 'file' not in request.files:
+        return "未选择文件", 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return "无效文件", 400
+    
+    try:
+        wb = openpyxl.load_workbook(file, data_only=True)
+        ws = wb.active
+
+        merged_values = {}
+        for merged_range in ws.merged_cells.ranges:
+            min_row, min_col, max_row, max_col = merged_range.min_row, merged_range.min_col, merged_range.max_row, merged_range.max_col
+            top_left_value = ws.cell(row=min_row, column=min_col).value
+            for row in range(min_row, max_row + 1):
+                for col in range(min_col, max_col + 1):
+                    merged_values[(row, col)] = top_left_value
+
+        headers = []
+        for cell in ws[1]:
+            header = str(cell.value).strip() if cell.value else f"列{cell.column_letter}"
+            headers.append(header)
+
+        imported_data = []
+        for row in ws.iter_rows(min_row=2):
+            if all(cell.value is None for cell in row):
+                continue
+
+            item = {}
+            for col_idx, cell in enumerate(row):
+                if col_idx >= len(headers):
+                    continue
+                    
+                header = headers[col_idx]
+                cell_value = merged_values.get((cell.row, cell.column), cell.value)
+                
+                if isinstance(cell_value, datetime):
+                    cell_value = cell_value.date()
+                elif isinstance(cell_value, (int, float)) and not isinstance(cell_value, bool):
+                    cell_value = cell_value
+                else:
+                    cell_value = str(cell_value).strip() if cell_value not in (None, "") else ""
+
+                item[header] = cell_value
+
+            key_node = item.get('关键节点', '')
+            deadline = None
+            if key_node:
+                date_match = re.search(
+                    r'(\d{4})[年/-]?(\d{1,2})?[月/-]?(\d{1,2})?',
+                    key_node
+                )
+                if date_match:
+                    try:
+                        year = int(date_match.group(1))
+                        month = int(date_match.group(2)) if date_match.group(2) else 1
+                        day = int(date_match.group(3)) if date_match.group(3) else 1
+                        deadline = date(year, month, day)
+                    except ValueError:
+                        deadline = None
+
+            completion = None
+            if item.get('完成时间'):
+                try:
+                    completion = datetime.strptime(item['完成时间'], '%Y-%m-%d').date()
+                except ValueError:
+                    pass
+
+            current_date = datetime.now().date()
+            status = '进行中'
+            if completion:
+                status = '逾期完成' if (deadline and completion > deadline) else '已完成'
+            elif deadline:
+                status = '逾期' if deadline < current_date else '进行中'
+
+            imported_data.append({
+                'main_content': item.get('主要内容', '未命名任务'),
+                'key_node': key_node,
+                'responsible_dept': item.get('责任部门', ''),
+                'responsible_person': item.get('责任人', ''),
+                'cooperating_dept': item.get('配合部门', ''),
+                'cooperating_persons': ','.join(item.get('配合人', '').split(',')),
+                'responsible_leader': item.get('责任领导', ''),
+                'deadline': deadline,
+                'completion_time': completion,
+                'status': status
+            })
+
+        try:
+            db.session.begin()
+            ProjectPlanDetail.query.filter_by(plan_id=plan_id).delete()
+            
+            for item in imported_data:
+                new_detail = ProjectPlanDetail(
+                    plan_id=plan_id,
+                    main_content=item['main_content'],
+                    key_node=item['key_node'],
+                    responsible_dept=item['responsible_dept'],
+                    responsible_person=item['responsible_person'],
+                    cooperating_dept=item['cooperating_dept'],
+                    cooperating_persons=item['cooperating_persons'],
+                    responsible_leader=item['responsible_leader'],
+                    deadline=item['deadline'],
+                    completion_time=item['completion_time'],
+                    status=item['status']
+                )
+                db.session.add(new_detail)
+            
+            db.session.commit()
+            return jsonify({
+                "message": f"成功导入{len(imported_data)}条数据",
+                "redirect": f"/project_plan_detail/{plan_id}"
+            }), 200
+
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            app.logger.error(f"数据库错误: {str(e)}")
+            return jsonify({"error": f"数据库操作失败: {str(e)}"}), 500
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"数据处理错误: {str(e)}")
+            return jsonify({"error": f"数据处理失败: {str(e)}"}), 500
+
+    except Exception as e:
+        app.logger.error(f"文件处理失败: {str(e)}", exc_info=True)
+        return jsonify({"error": f"文件处理失败: {str(e)}"}), 500
+
 @app.route('/update_project_deadline/<int:detail_id>', methods=['POST'])
 def update_project_deadline(detail_id):
     if 'user' not in session or not session.get('is_admin'):
@@ -1466,6 +1601,93 @@ def export_time_plan():
         app.logger.error(f"文件生成失败: {str(e)}")
         return "文件生成错误，请联系管理员", 500
 
+@app.route('/add_time_plan_detail', methods=['POST'])
+def add_time_plan_detail():
+    if 'user' not in session or not session.get('is_admin'):
+        return jsonify({'status': 'error', 'message': '无操作权限'}), 403
+    
+    try:
+        form_data = request.get_json()
+        
+        # 获取或创建时间计划
+        current_plan = TimePlan.query.first()
+        if not current_plan:
+            current_plan = TimePlan(plan_name="默认时间计划")
+            db.session.add(current_plan)
+            db.session.commit()  # 确保新计划先提交才能获取ID
+        
+        # 日期处理与验证
+        expected_deadline = None
+        if form_data.get('expected_deadline'):
+            try:
+                expected_deadline = datetime.strptime(form_data['expected_deadline'], '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({'status': 'error', 'message': '预计完成时间格式错误'}), 400
+        
+        actual_completion = None
+        if form_data.get('actual_completion'):
+            try:
+                actual_completion = datetime.strptime(form_data['actual_completion'], '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({'status': 'error', 'message': '实际完成时间格式错误'}), 400
+        
+        # 自动计算状态
+        status = '进行中'
+        current_date = datetime.now().date()
+        if actual_completion:
+            if expected_deadline:
+                status = '逾期完成' if actual_completion > expected_deadline else '已完成'
+            else:
+                status = '已完成'
+        elif expected_deadline and expected_deadline < current_date:
+            status = '逾期'
+        
+        # 创建新条目
+        new_detail = TimePlanDetail(
+            plan_id=current_plan.id,
+            plan_node=form_data.get('plan_node', '新计划节点').strip(),
+            responsible_leader=form_data.get('responsible_leader', '').strip(),
+            responsible_dept=form_data.get('responsible_dept', '').strip(),
+            cooperating_dept=form_data.get('cooperating_dept', '').strip(),
+            expected_deadline=expected_deadline,
+            actual_completion=actual_completion,
+            progress=form_data.get('progress', '').strip(),
+            issues=form_data.get('issues', '').strip(),
+            bg_color=form_data.get('bg_color', '#FFFFFF'),
+            operators=','.join(form_data.get('operators', [])),
+            status=status
+        )
+        
+        db.session.add(new_detail)
+        db.session.commit()
+        
+        return jsonify({
+            'status': 'success',
+            'detail': {
+                'id': new_detail.id,
+                'plan_node': new_detail.plan_node,
+                'responsible_leader': new_detail.responsible_leader,
+                'responsible_dept': new_detail.responsible_dept,
+                'cooperating_dept': new_detail.cooperating_dept,
+                'expected_deadline': new_detail.expected_deadline.strftime('%Y-%m-%d') if new_detail.expected_deadline else '',
+                'actual_completion': new_detail.actual_completion.strftime('%Y-%m-%d') if new_detail.actual_completion else '',
+                'progress': new_detail.progress,
+                'issues': new_detail.issues,
+                'bg_color': new_detail.bg_color,
+                'operators': new_detail.operators.split(','),
+                'status': new_detail.status
+            }
+        })
+    
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        app.logger.error(f"数据库错误: {str(e)}")
+        return jsonify({'status': 'error', 'message': '数据库操作失败'}), 500
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"系统异常: {str(e)}")
+        return jsonify({'status': 'error', 'message': f'系统错误: {str(e)}'}), 500
+
 @app.route('/delete_time_plan_row/<int:row_id>', methods=['DELETE'])
 def delete_time_plan_row(row_id):
     if 'user' not in session or not session.get('is_admin'):
@@ -1582,49 +1804,21 @@ def import_other_plan(plan_id):
         wb = openpyxl.load_workbook(file, data_only=True)
         ws = wb.active
 
-        # 处理合并单元格
         merged_values = {}
         for merged_range in ws.merged_cells.ranges:
             min_row, min_col, max_row, max_col = merged_range.min_row, merged_range.min_col, merged_range.max_row, merged_range.max_col
             top_left_value = ws.cell(row=min_row, column=min_col).value
-            
             for row in range(min_row, max_row + 1):
                 for col in range(min_col, max_col + 1):
                     merged_values[(row, col)] = top_left_value
 
-        # 动态处理表头
         headers = []
         for cell in ws[1]:
             header = str(cell.value).strip() if cell.value else f"列{cell.column_letter}"
             headers.append(header)
 
         imported_data = []
-        
-        # 增强的日期解析函数
-        def parse_date(value):
-            if isinstance(value, datetime):
-                return value.date()
-            if isinstance(value, str):
-                try:
-                    return datetime.strptime(value, '%Y-%m-%d').date()
-                except ValueError:
-                    pass
-                match = re.search(
-                    r'(\d{4})[年/-]?(\d{1,2})?[月/-]?(\d{1,2})?',
-                    value
-                )
-                if match:
-                    year = int(match.group(1)) if match.group(1) else datetime.now().year
-                    month = int(match.group(2)) if match.group(2) else 1
-                    day = int(match.group(3)) if match.group(3) else 1
-                    try:
-                        return date(year, month, day)
-                    except ValueError:
-                        app.logger.warning(f"无效日期格式: {value}")
-            return None
-
-        # 处理数据行
-        for row_idx, row in enumerate(ws.iter_rows(min_row=2), start=2):
+        for row in ws.iter_rows(min_row=2):
             if all(cell.value is None for cell in row):
                 continue
 
@@ -1636,55 +1830,60 @@ def import_other_plan(plan_id):
                 header = headers[col_idx]
                 cell_value = merged_values.get((cell.row, cell.column), cell.value)
                 
-                # 处理数据类型
                 if isinstance(cell_value, datetime):
                     cell_value = cell_value.date()
                 elif isinstance(cell_value, (int, float)) and not isinstance(cell_value, bool):
-                    cell_value = cell_value  # 保留原始数值类型
+                    cell_value = cell_value
                 else:
                     cell_value = str(cell_value).strip() if cell_value not in (None, "") else ""
 
-                # 处理特殊字段
-                if header in ['完成时限', '完成时间']:
-                    item[header] = parse_date(cell_value)
-                else:
-                    item[header] = cell_value
+                item[header] = cell_value
 
-            # 动态生成主要内容
-            main_content = item.get('任务名称') or item.get('主要内容') or '未命名任务'
-            item['任务名称'] = main_content
+            def parse_date(value):
+                if isinstance(value, date):
+                    return value
+                try:
+                    return datetime.strptime(value, '%Y-%m-%d').date()
+                except (ValueError, TypeError):
+                    pass
+                match = re.search(
+                    r'(\d{4})[年/-]?(\d{1,2})[月/-]?(\d{1,2})?',
+                    str(value)
+                )
+                if match:
+                    year = int(match.group(1))
+                    month = int(match.group(2))
+                    day = int(match.group(3)) if match.group(3) else 1
+                    try:
+                        return date(year, month, day)
+                    except ValueError:
+                        return None
+                return None
 
-            # 自动状态计算
-            deadline = item.get('完成时限')
-            completion = item.get('完成时间')
+            deadline = parse_date(item.get('完成时限'))
+            completion = parse_date(item.get('完成时间'))
             current_date = datetime.now().date()
-            
-            status = item.get('状态', '')
-            if not status:
-                if completion:
-                    status = '逾期完成' if (deadline and completion > deadline) else '已完成'
-                else:
-                    status = '逾期' if (deadline and deadline < current_date) else '进行中'
-            
-            # 操作人员处理
+
+            status = '进行中'
+            if completion:
+                status = '逾期完成' if (deadline and completion > deadline) else '已完成'
+            elif deadline and deadline < current_date:
+                status = '逾期'
+
             operators = []
-            if '操作权限' in item and item['操作权限']:
+            if '操作权限' in item:
                 operators = [op.strip() for op in str(item['操作权限']).split(',') if op.strip()]
 
-            # 构建动态内容
-            dynamic_content = {k: v for k, v in item.items() if k not in ['status', 'operators']}
-            
             imported_data.append({
-                'content': dynamic_content,
+                'content': {k: v for k, v in item.items() if k not in ['状态', '操作权限']},
                 'status': status,
                 'operators': operators,
-                'deadline': item.get('完成时限'),
-                'completion_time': item.get('完成时间')
+                'deadline': deadline,
+                'completion_time': completion
             })
 
         try:
             db.session.begin()
-            
             OtherPlanDetail.query.filter_by(plan_id=plan_id).delete()
             
             for data in imported_data:
@@ -1698,13 +1897,8 @@ def import_other_plan(plan_id):
                 )
                 db.session.add(new_detail)
             
-            plan = OtherPlan.query.get(plan_id)
-            if plan:
-                plan.created_at = datetime.utcnow()
-            
             db.session.commit()
             
-            # 构建返回数据
             new_details = OtherPlanDetail.query.filter_by(plan_id=plan_id).all()
             result = [{
                 'id': d.id,
@@ -1718,23 +1912,14 @@ def import_other_plan(plan_id):
             return jsonify({
                 "status": "success",
                 "message": f"成功导入{len(imported_data)}条数据",
-                "data": result,
-                "columns": list(imported_data[0]['content'].keys()) if imported_data else []
+                "data": result
             }), 200
 
-        except SQLAlchemyError as e:
-            db.session.rollback()
-            app.logger.error(f"数据库错误: {str(e)}")
-            return jsonify({"status": "error", "message": f"数据库操作失败: {str(e)}"}), 500
         except Exception as e:
             db.session.rollback()
-            app.logger.error(f"数据处理错误: {str(e)}")
-            return jsonify({"status": "error", "message": f"数据处理失败: {str(e)}"}), 500
+            return jsonify({"status": "error", "message": f"数据库错误: {str(e)}"}), 500
 
-    except openpyxl.utils.exceptions.InvalidFileException:
-        return jsonify({"status": "error", "message": "无效的Excel文件格式"}), 400
     except Exception as e:
-        app.logger.error(f"文件处理失败: {str(e)}", exc_info=True)
         return jsonify({"status": "error", "message": f"文件处理失败: {str(e)}"}), 500
 
 @app.route('/add_other_plan', methods=['POST'])

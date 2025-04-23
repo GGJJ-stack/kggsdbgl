@@ -4,6 +4,9 @@
         <h2 class="mb-0 text-primary">时间类计划管理</h2>
         <div>
             <a href="/plan_management" class="btn btn-secondary">返回计划管理</a>
+            {% if current_user.is_admin %}
+            <button id="add-btn" class="btn btn-success">新增条目</button>
+            {% endif %}
             <button id="export-btn" class="btn btn-warning">一键导出</button>
             <label for="file-input" class="btn btn-primary mb-0">
                 一键导入
@@ -48,7 +51,7 @@
                     <td>
                         {% if current_user.is_admin %}
                         <input type="date" class="actual-completion form-control form-control-sm" 
-                               value="{{ detail.actual_completion if detail.actual_completion else '' }}">
+                               value="{{ detail.actual_completion.strftime('%Y-%m-%d') if detail.actual_completion else '' }}">
                         {% else %}
                         {{ detail.actual_completion|default('', true) }}
                         {% endif %}
@@ -79,105 +82,96 @@
     </div>
 </div>
 
+<!-- 将模态框移到block content内部底部 -->
+<!-- 修改模态框样式为悬浮对话框 -->
+<div class="modal fade" id="addModal" tabindex="-1" aria-hidden="true" style="display: none;">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="position: fixed; bottom: 20px; right: 20px; margin: 0; max-width: 500px;">
+        <div class="modal-content shadow-lg">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="addModalLabel">新建时间计划条目</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="addForm">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-12">
+                            <label class="form-label">计划节点</label>
+                            <input type="text" class="form-control" name="plan_node" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">责任领导</label>
+                            <input type="text" class="form-control" name="responsible_leader">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">责任部门</label>
+                            <input type="text" class="form-control" name="responsible_dept" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">配合部门</label>
+                            <input type="text" class="form-control" name="cooperating_dept">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">预计完成时间</label>
+                            <input type="date" class="form-control" name="expected_deadline">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">实际完成时间</label>
+                            <input type="date" class="form-control" name="actual_completion">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">当月是否完成</label>
+                            <select class="form-select" name="is_completed">
+                                <option value="true">是</option>
+                                <option value="false" selected>否</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">进展情况</label>
+                            <textarea class="form-control" name="progress" rows="2"></textarea>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">存在问题</label>
+                            <textarea class="form-control" name="issues" rows="2"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">提交</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // 处理完成状态变化
-    document.querySelectorAll('.completion-status').forEach(select => {
-        select.addEventListener('change', function() {
-            const row = this.closest('tr');
-            const isCompleted = this.value === 'true';
-            row.style.backgroundColor = isCompleted ? '' : '#FFE4B5';  
-            
-            fetch(`/update_time_plan/${row.dataset.id}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `is_completed=${isCompleted}`
-            }).catch(error => console.error('更新失败:', error));
-        });
-    });
+// 修改原提交成功后的代码，添加动画效果
+document.getElementById('addForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const jsonData = Object.fromEntries(formData.entries());
+    
+    // 转换字段类型
+    jsonData.is_completed = jsonData.is_completed === 'true';
+    if (jsonData.expected_deadline === '') delete jsonData.expected_deadline;
+    if (jsonData.actual_completion === '') delete jsonData.actual_completion;
 
-    document.querySelectorAll('.actual-completion').forEach(input => {
-        input.addEventListener('change', function() {
-            const formData = new FormData();
-            formData.append('actual_completion', this.value);
-            
-            fetch(`/update_time_plan/${this.closest('tr').dataset.id}`, {
-                method: 'POST',
-                body: formData
-            }).catch(error => console.error('日期更新失败:', error));
-        });
-    });
-
-    document.querySelectorAll('.editable').forEach(cell => {
-        cell.addEventListener('blur', function() {
-            const field = this.classList.contains('progress') ? 'progress' : 'issues';
-            const formData = new FormData();
-            formData.append(field, this.innerText);
-            
-            fetch(`/update_time_plan/${this.closest('tr').dataset.id}`, {
-                method: 'POST',
-                body: formData
-            }).catch(error => console.error('内容更新失败:', error));
-        });
-    });
-
-    document.querySelectorAll('.delete-btn').forEach(button => {
-        button.addEventListener('click', function() {
-            if (confirm('确认删除该条目？')) {
-                fetch(`/delete_time_plan_row/${this.closest('tr').dataset.id}`, {
-                    method: 'DELETE'
-                }).then(response => {
-                    if (response.ok) {
-                        this.closest('tr').remove();
-                    }
-                }).catch(error => console.error('删除失败:', error));
-            }
-        });
-    });
-
-    document.getElementById('file-input').addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const formData = new FormData();
-        formData.append('file', file);
-
-        fetch('/import_time_plan', {
-            method: 'POST',
-            body: formData
-        }).then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
+    fetch('/add_time_plan_detail', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(jsonData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            $('#addModal').modal('hide');
+            // 添加关闭动画
+            $('#addModal').on('hidden.bs.modal', function() {
                 window.location.reload();
-            } else {
-                alert(data.error || '导入失败');
-            }
-        }).catch(error => console.error('导入失败:', error));
-    });
-
-    document.getElementById('export-btn').addEventListener('click', function() {
-        window.location.href = '/export_time_plan';
-    });
-});
-
-document.querySelectorAll('.expected-deadline').forEach(input => {
-    input.addEventListener('change', function() {
-        const formData = new FormData();
-        formData.append('expected_deadline', this.value);
-        
-        fetch(`/update_time_plan/${this.closest('tr').dataset.id}`, {
-            method: 'POST',
-            body: formData
-        }).catch(error => console.error('预计完成时间更新失败:', error));
-    });
-});
-
-document.querySelectorAll('.completion-status').forEach(select => {
-    const isCompleted = select.value === 'true';
-    const row = select.closest('tr');
-    row.style.backgroundColor = isCompleted ? '' : '#FFE4B5';
+            });
+        }
+    })
+    .catch(error => console.error('添加失败:', error));
 });
 </script>
 
@@ -253,7 +247,7 @@ document.querySelectorAll('.completion-status').forEach(select => {
     margin-top: 20px;
     overflow: hidden;
     padding: 0;
-    overflow-x: auto;  /* 新增水平滚动条 */
+    overflow-x: auto;
 }
 
 @media (max-width: 768px) {
@@ -264,4 +258,191 @@ document.querySelectorAll('.completion-status').forEach(select => {
     }
 }
 </style>
+
+<!-- 在原有script标签前添加这两个依赖 -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化背景色
+    document.querySelectorAll('.completion-status').forEach(select => {
+        const isCompleted = select.value === 'true';
+        const row = select.closest('tr');
+        row.style.backgroundColor = isCompleted ? '' : '#FFE4B5';
+    });
+
+    // 处理完成状态变化
+    document.querySelectorAll('.completion-status').forEach(select => {
+        select.addEventListener('change', function() {
+            const row = this.closest('tr');
+            const isCompleted = this.value === 'true';
+            row.style.backgroundColor = isCompleted ? '' : '#FFE4B5';  
+            
+            fetch(`/update_time_plan/${row.dataset.id}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `is_completed=${isCompleted}`
+            }).catch(error => console.error('更新失败:', error));
+        });
+    });
+
+    document.querySelectorAll('.actual-completion').forEach(input => {
+        input.addEventListener('change', function() {
+            const formData = new FormData();
+            formData.append('actual_completion', this.value);
+            
+            fetch(`/update_time_plan/${this.closest('tr').dataset.id}`, {
+                method: 'POST',
+                body: formData
+            }).catch(error => console.error('日期更新失败:', error));
+        });
+    });
+
+    document.querySelectorAll('.editable').forEach(cell => {
+        cell.addEventListener('blur', function() {
+            const field = this.classList.contains('progress') ? 'progress' : 'issues';
+            const formData = new FormData();
+            formData.append(field, this.innerText);
+            
+            fetch(`/update_time_plan/${this.closest('tr').dataset.id}`, {
+                method: 'POST',
+                body: formData
+            }).catch(error => console.error('内容更新失败:', error));
+        });
+    });
+
+    // 事件委托处理删除按钮
+    document.querySelector('tbody').addEventListener('click', function(e) {
+        if (e.target.classList.contains('delete-btn')) {
+            if (confirm('确认删除该条目？')) {
+                fetch(`/delete_time_plan_row/${e.target.closest('tr').dataset.id}`, {
+                    method: 'DELETE'
+                }).then(response => {
+                    if (response.ok) {
+                        e.target.closest('tr').remove();
+                    }
+                }).catch(error => console.error('删除失败:', error));
+            }
+        }
+    });
+
+    document.getElementById('file-input').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        fetch('/import_time_plan', {
+            method: 'POST',
+            body: formData
+        }).then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                window.location.reload();
+            } else {
+                alert(data.error || '导入失败');
+            }
+        }).catch(error => console.error('导入失败:', error));
+    });
+
+    document.getElementById('export-btn').addEventListener('click', function() {
+        window.location.href = '/export_time_plan';
+    });
+
+    document.querySelectorAll('.expected-deadline').forEach(input => {
+        input.addEventListener('change', function() {
+            const formData = new FormData();
+            formData.append('expected_deadline', this.value);
+            
+            fetch(`/update_time_plan/${this.closest('tr').dataset.id}`, {
+                method: 'POST',
+                body: formData
+            }).catch(error => console.error('预计完成时间更新失败:', error));
+        });
+    });
+
+    // 新增条目模态框控制
+    document.getElementById('add-btn')?.addEventListener('click', function() {
+        $('#addModal').modal('show');
+    });
+
+    // 处理新增表单提交
+    document.getElementById('addForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const jsonData = Object.fromEntries(formData.entries());
+        
+        // 转换字段类型
+        jsonData.is_completed = jsonData.is_completed === 'true';
+        if (jsonData.expected_deadline === '') delete jsonData.expected_deadline;
+        if (jsonData.actual_completion === '') delete jsonData.actual_completion;
+
+        fetch('/add_time_plan_detail', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(jsonData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                $('#addModal').modal('hide');
+                window.location.reload();
+            } else {
+                alert('添加失败: ' + data.message);
+            }
+        })
+        .catch(error => console.error('添加失败:', error));
+    });
+});
+
+function createNewRow(detail) {
+    const row = document.createElement('tr');
+    row.dataset.id = detail.id;
+    row.innerHTML = `
+        <td>${document.querySelectorAll('tbody tr').length + 1}</td>
+        <td>新计划节点</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td><input type="date" class="expected-deadline form-control form-control-sm"></td>
+        <td><input type="date" class="actual-completion form-control form-control-sm"></td>
+        <td contenteditable="true" class="editable progress"></td>
+        <td contenteditable="true" class="editable issues"></td>
+        <td>
+            <select class="completion-status form-select form-select-sm">
+                <option value="true">是</option>
+                <option value="false" selected>否</option>
+            </select>
+        </td>
+        <td><button class="btn btn-danger btn-sm delete-btn">删除</button></td>
+    `;
+    return row;
+}
+
+function bindRowEvents(row) {
+    const select = row.querySelector('.completion-status');
+    select.addEventListener('change', function() {
+        const isCompleted = this.value === 'true';
+        row.style.backgroundColor = isCompleted ? '' : '#FFE4B5';
+        fetch(`/update_time_plan/${row.dataset.id}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: `is_completed=${isCompleted}`
+        });
+    });
+
+    row.querySelector('.expected-deadline').addEventListener('change', function() {
+        const formData = new FormData();
+        formData.append('expected_deadline', this.value);
+        fetch(`/update_time_plan/${row.dataset.id}`, {
+            method: 'POST',
+            body: formData
+        });
+    });
+}
+</script>
 {% endblock %}
