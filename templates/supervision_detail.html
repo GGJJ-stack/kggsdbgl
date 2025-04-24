@@ -261,10 +261,18 @@
                     {% for group in merged_details %}
                     {% set detail = group.details[0] %}
                     <tr class="{% if detail.status in ['逾期','逾期完成'] %}overdue{% endif %}">
-                        <td rowspan="{{ group.rowspan }}" style="vertical-align:middle">{{ group.main_content }}</td>
-                        <td>{{ detail.key_node }}</td>
-                        <td>{{ detail.responsible_dept }}</td>
-                        <td>{{ detail.responsible_person }}</td>
+                        <td rowspan="{{ group.rowspan }}" style="vertical-align:middle">
+                            {{ group.main_content }}
+                        </td>
+                        <td>
+                            {{ detail.key_node }}
+                        </td>
+                        <td>
+                            {{ detail.responsible_dept }}
+                        </td>
+                        <td>
+                            {{ detail.responsible_person }}
+                        </td>
                         <td>{{ detail.cooperating_dept }}</td>
                         <td>{{ detail.cooperating_persons }}</td>
                         <td>{{ detail.responsible_leader }}</td>
@@ -279,6 +287,8 @@
                                     <button style="padding:3px 6px;width:100%;font-size:13px">详情</button>
                                 </a>
                                 {% if is_admin %}
+                                <button style="padding:3px 6px;width:100%;font-size:13px" 
+                                        onclick="toggleEditMode(this, '{{ detail.id }}')">编辑</button>
                                 <button style="padding:3px 6px;width:100%;font-size:13px" 
                                         data-detail-id="{{ detail.id }}" 
                                         data-source="{{ source }}" 
@@ -320,6 +330,8 @@
                                     <button style="padding:3px 6px;width:100%;font-size:13px">详情</button>
                                 </a>
                                 {% if is_admin %}
+                                <button style="padding:3px 6px;width:100%;font-size:13px" 
+                                        onclick="toggleEditMode(this, '{{ detail.id }}')">编辑</button>
                                 <button style="padding:3px 6px;width:100%;font-size:13px" 
                                         data-detail-id="{{ detail.id }}" 
                                         data-source="{{ source }}" 
@@ -519,6 +531,109 @@
         }
 
         document.getElementById('modalBackdrop').addEventListener('click', hideAddForm);
+    </script>
+
+<script>
+        function toggleEditMode(button, detailId) {
+            const row = button.closest('tr');
+            const isEditing = row.classList.contains('editing');
+
+            if (isEditing) {
+                const data = {};
+                row.querySelectorAll('.editable-field').forEach((cell, index) => {
+                    const input = cell.querySelector('input, select');
+            // 处理日期输入清空的情况
+            if (input.type === 'date' && input.value === '') {
+                data[input.name] = '';
+            } else {
+                data[input.name] = input.value;
+            }
+        });
+
+                fetch(`/update_{{ source }}_detail/${detailId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    body: JSON.stringify(data)
+                })
+                .then(response => {
+                    if(!response.ok) return response.json().then(err => { throw new Error(err.message) });
+                    location.reload();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert(`更新失败: ${error.message}`);
+                });
+                
+            } else {
+                row.querySelectorAll('td:not(:last-child)').forEach((cell, index) => {
+                    if(index === 0) return;
+                    
+                    const field = getFieldNameByIndex(index);
+                    const original = cell.textContent.trim();
+                    cell.dataset.original = original;
+                    
+                    let inputElement;
+                    if(field === 'responsible_person' || field === 'responsible_leader') {
+                        inputElement = createUserSelect(original, field);
+                    } else if(field === 'deadline') {
+                        inputElement = createDateInput(original);
+                    } else {
+                        inputElement = document.createElement('input');
+                        inputElement.value = original;
+                        inputElement.className = 'form-control';
+                        inputElement.name = field;  // 新增name属性
+                    }
+                    
+                    cell.innerHTML = '';
+                    cell.classList.add('editable-field');
+                    cell.appendChild(inputElement);
+                });
+                row.classList.add('editing');
+                button.textContent = '保存';
+            }
+        }
+
+    
+        function getFieldNameByIndex(index) {
+            const fields = [
+                'key_node', 'responsible_dept', 'responsible_person',
+                'cooperating_dept', 'cooperating_persons', 'responsible_leader',
+                'deadline', 'completion_time', 'status'
+            ];
+            return fields[index-1];
+        }
+
+        function createUserSelect(currentValue, fieldType) {
+            const select = document.createElement('select');
+            select.className = 'form-select';
+            select.name = fieldType;  // 新增name属性
+            {% if source == 'plan' %}
+                const users = {{ users|tojson|safe }};
+                const leaders = {{ leaders|tojson|safe }};
+            {% else %}
+                const users = {{ users|tojson|safe }};
+                const leaders = {{ leaders|tojson|safe }};
+            {% endif %}
+
+            const options = (fieldType === 'responsible_leader' ? leaders : users)
+                .map(user => `<option value="${user.username}" ${user.username === currentValue ? 'selected' : ''}>${user.username}（${user.department}）</option>`)
+                .join('');
+            
+            select.innerHTML = options;
+            return select;
+        }
+
+        function createDateInput(currentValue) {
+            const input = document.createElement('input');
+            input.type = 'date';
+            input.className = 'form-control';
+            input.name = 'deadline';  // 新增name属性
+            input.value = currentValue;
+            return input;
+        }
     </script>
 </body>
 </html>

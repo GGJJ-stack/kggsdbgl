@@ -59,9 +59,9 @@ class User(db.Model):
     phone = db.Column(db.String(20))
     is_admin = db.Column(db.Boolean, default=False)
     is_department_info = db.Column(db.Boolean, default=False)
-    is_department_head = db.Column(db.Boolean, default=False)  # 部门负责人标记
+    is_department_head = db.Column(db.Boolean, default=False)  
     is_company_info = db.Column(db.Boolean, default=False)
-    is_general_dept_head = db.Column(db.Boolean, default=False)  # 集团部门负责人标记
+    is_general_dept_head = db.Column(db.Boolean, default=False)  
     is_company_leader = db.Column(db.Boolean, default=False)
 
     @property
@@ -161,7 +161,7 @@ class OtherPlan(db.Model):
             'plan_name': self.plan_name,
             'category': self.category,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'details': [detail.to_dict() for detail in self.details.all()]  # 添加.all()确保加载关联数据
+            'details': [detail.to_dict() for detail in self.details.all()]  
         }
 
 class OtherPlanDetail(db.Model):
@@ -187,7 +187,7 @@ class OtherPlanDetail(db.Model):
             'operators': self.operators.split(',') if self.operators else [],
             'deadline': self.deadline.isoformat() if self.deadline else None,
             'completion_time': self.completion_time.isoformat() if self.completion_time else None,
-            'plan_id': self.plan_id  # 添加关联ID字段
+            'plan_id': self.plan_id  
         }
 
 class PersonalWeeklyReport(db.Model):
@@ -578,9 +578,10 @@ def supervision_detail(project_id):
     if 'user' not in session:
         return redirect('/')
     
-    project = db.session.get(SupervisionProject, project_id)  # 修改为新的session.get方法
+    project = SupervisionProject.query.get_or_404(project_id)
     details = SupervisionDetail.query.filter_by(project_id=project_id).order_by(SupervisionDetail.main_content).all()
     
+    # 合并相同主内容条目
     merged_details = []
     prev_content = None
     for detail in details:
@@ -595,8 +596,10 @@ def supervision_detail(project_id):
             merged_details[-1]['details'].append(detail)
             merged_details[-1]['rowspan'] += 1
     
-    users = User.query.all()
-    leaders = User.query.filter_by(is_company_leader=True).all()
+    # 转换为字典格式解决序列化问题
+    users = [{"username": u.username, "department": u.department} for u in User.query.all()]
+    leaders = [{"username": l.username, "department": l.department} 
+              for l in User.query.filter_by(is_company_leader=True).all()]
     
     return render_template('supervision_detail.html',
                          project=project,
@@ -604,7 +607,7 @@ def supervision_detail(project_id):
                          users=users,
                          leaders=leaders,
                          is_admin=session.get('is_admin', False),
-                         source='supervision')
+                         source='supervision') 
 
 @app.route('/export_project_details/<int:project_id>')
 def export_project_details(project_id):
@@ -1057,6 +1060,138 @@ def delete_project_detail(detail_id):
         app.logger.error(f"系统异常: {str(e)}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@app.route('/update_project_detail/<int:detail_id>', methods=['POST'])
+def update_project_detail(detail_id):
+    if 'user' not in session:
+        return jsonify({'status': 'error', 'message': '未授权操作'}), 401
+    
+    detail = SupervisionDetail.query.get_or_404(detail_id)
+    current_user = User.query.filter_by(username=session['user']).first()
+    if not current_user.is_admin:
+        return jsonify({'status': 'error', 'message': '无操作权限'}), 403
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'status': 'error', 'message': '请求数据为空'}), 400
+
+        for field, value in data.items():
+            # 处理日期字段
+            if field in ['deadline', 'completion_time']:
+                if value == '':  # 清空日期时设为None
+                    value = None
+                else:
+                    try:
+                        value = datetime.strptime(value, '%Y-%m-%d').date() if value else None
+                    except ValueError:
+                        return jsonify({'status': 'error', 'message': f'无效的{field}日期格式'}), 400
+
+            if hasattr(detail, field):
+                setattr(detail, field, value)
+
+        # 统一的状态更新逻辑
+        if detail.completion_time:
+            if detail.deadline:
+                detail.status = '逾期完成' if detail.completion_time > detail.deadline else '已完成'
+            else:
+                detail.status = '已完成'
+        elif detail.deadline:
+            detail.status = '逾期' if detail.deadline < datetime.now().date() else '进行中'
+        else:
+            detail.status = '进行中'
+
+        db.session.commit()
+        return jsonify({'status': 'success'})
+    
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        app.logger.error(f"数据库错误: {str(e)}")
+        return jsonify({'status': 'error', 'message': '数据库操作失败'}), 500
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/update_supervision_detail/<int:detail_id>', methods=['POST'])
+def update_supervision_detail(detail_id):
+    if 'user' not in session:
+        return jsonify({'status': 'error', 'message': '未授权操作'}), 401
+    
+    detail = SupervisionDetail.query.get_or_404(detail_id)
+    current_user = User.query.filter_by(username=session['user']).first()
+    
+    # 权限验证：管理员/部门负责人/责任人/协作者
+    cooperating_persons = detail.cooperating_persons.split(',') if detail.cooperating_persons else []
+    has_access = (
+        current_user.is_admin or
+        current_user.is_dept_head or
+        current_user.username == detail.responsible_person or
+        current_user.username in cooperating_persons
+    )
+    
+    if not has_access:
+        return jsonify({'status': 'error', 'message': '无操作权限'}), 403
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'status': 'error', 'message': '无效请求数据'}), 400
+
+    try:
+        # 处理特殊字段
+        if 'deadline' in data:
+            try:
+                new_deadline = datetime.strptime(data['deadline'], '%Y-%m-%d').date()
+                data['deadline'] = new_deadline
+                # 自动更新状态
+                if detail.completion_time:
+                    detail.status = '逾期完成' if detail.completion_time > new_deadline else '已完成'
+                else:
+                    detail.status = '逾期' if new_deadline < datetime.now().date() else '进行中'
+            except ValueError:
+                return jsonify({'status': 'error', 'message': '无效日期格式'}), 400
+
+        if 'completion_time' in data:
+            try:
+                new_completion = datetime.strptime(data['completion_time'], '%Y-%m-%d').date() if data['completion_time'] else None
+                data['completion_time'] = new_completion
+                # 自动更新状态
+                if new_completion:
+                    if detail.deadline:
+                        detail.status = '逾期完成' if new_completion > detail.deadline else '已完成'
+                    else:
+                        detail.status = '已完成'
+            except ValueError:
+                return jsonify({'status': 'error', 'message': '无效完成时间格式'}), 400
+
+        # 批量更新字段
+        for field, value in data.items():
+            if hasattr(detail, field):
+                # 处理多选字段
+                if field == 'cooperating_persons':
+                    valid_persons = [p.strip() for p in value.split(',') if p.strip() in [u.username for u in User.query.all()]]
+                    setattr(detail, field, ','.join(valid_persons))
+                else:
+                    setattr(detail, field, value)
+
+        # 最后状态检查
+        if not detail.status:
+            if detail.completion_time:
+                detail.status = '已完成'
+            elif detail.deadline and detail.deadline < datetime.now().date():
+                detail.status = '逾期'
+            else:
+                detail.status = '进行中'
+
+        detail.last_status_update = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'status': 'success', 'new_status': detail.status})
+    
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        app.logger.error(f"数据库操作失败: {str(e)}")
+        return jsonify({'status': 'error', 'message': '数据库操作失败'}), 500
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"系统异常: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/submit_progress/<int:detail_id>', methods=['POST'])
 def submit_progress(detail_id):
@@ -1137,23 +1272,19 @@ def plan_progress(detail_id):
     if not detail:
         abort(404)
     
-    # 获取当前用户（根据用户名查询）
     current_user = User.query.filter_by(username=session['user']).first()
     if not current_user:
         abort(401, description="用户不存在")
     
-    # 处理协作者信息
     cooperating_persons = []
     if detail.cooperating_persons:
         cooperating_persons = [cp.strip() for cp in detail.cooperating_persons.split(',')]
     
-    # 权限验证
     has_access = (
         current_user.username == detail.responsible_person or
         current_user.username in cooperating_persons
     )
     
-    # 获取进度记录
     progress_records = ProgressRecord.query.filter_by(detail_id=detail_id).order_by(ProgressRecord.submit_time.desc()).all()
     
     return render_template('project_progress.html',
@@ -1186,8 +1317,9 @@ def project_plan_detail(plan_id):
             merged_details[-1]['details'].append(detail)
             merged_details[-1]['rowspan'] += 1
     
-    users = User.query.all()
-    leaders = User.query.filter_by(is_company_leader=True).all()
+    users = [{"username": u.username, "department": u.department} for u in User.query.all()]
+    leaders = [{"username": l.username, "department": l.department} 
+              for l in User.query.filter_by(is_company_leader=True).all()]
     
     return render_template('supervision_detail.html',
                          project=plan,
@@ -1217,6 +1349,56 @@ def delete_plan_detail(detail_id):
         return jsonify({'status': 'error', 'message': '数据库操作失败'}), 500
     except Exception as e:
         app.logger.error(f"系统异常: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/update_plan_detail/<int:detail_id>', methods=['POST'])
+def update_plan_detail(detail_id):
+    if 'user' not in session:
+        return jsonify({'status': 'error', 'message': '未授权操作'}), 401
+    
+    detail = ProjectPlanDetail.query.get_or_404(detail_id)
+    current_user = User.query.filter_by(username=session['user']).first()
+    if not current_user.is_admin:
+        return jsonify({'status': 'error', 'message': '无操作权限'}), 403
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'status': 'error', 'message': '请求数据为空'}), 400
+
+        for field, value in data.items():
+            # 处理空日期值
+            if field in ['deadline', 'completion_time']:
+                if value == '':  # 前端传入空字符串时设为None
+                    value = None
+                else:
+                    try:
+                        value = datetime.strptime(value, '%Y-%m-%d').date() if value else None
+                    except ValueError:
+                        return jsonify({'status': 'error', 'message': f'无效的{field}日期格式'}), 400
+
+            if hasattr(detail, field):
+                setattr(detail, field, value)
+
+        # 自动更新状态逻辑
+        if detail.completion_time:
+            if detail.deadline:
+                detail.status = '逾期完成' if detail.completion_time > detail.deadline else '已完成'
+            else:
+                detail.status = '已完成'
+        elif detail.deadline:
+            detail.status = '逾期' if detail.deadline < datetime.now().date() else '进行中'
+        else:
+            detail.status = '进行中'
+
+        db.session.commit()
+        return jsonify({'status': 'success'})
+    
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        app.logger.error(f"数据库错误: {str(e)}")
+        return jsonify({'status': 'error', 'message': '数据库操作失败'}), 500
+    except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/add_plan_detail/<int:plan_id>', methods=['POST'])
@@ -1257,6 +1439,53 @@ def add_plan_detail(plan_id):
         db.session.rollback()
         print(f"添加失败: {str(e)}")
         return f"提交失败: {str(e)}", 500
+    
+@app.route('/export_plan_details/<int:plan_id>')
+def export_plan_details(plan_id):
+    if 'user' not in session:
+        return redirect('/')
+    
+    details = ProjectPlanDetail.query.filter_by(plan_id=plan_id).all()
+    
+    data = [{
+        '主要内容': d.main_content,
+        '关键节点': d.key_node or '',
+        '责任部门': d.responsible_dept or '',
+        '责任人': d.responsible_person or '',
+        '配合部门': d.cooperating_dept or '',
+        '配合人': d.cooperating_persons or '',
+        '责任领导': d.responsible_leader or '',
+        '完成时限': d.deadline.strftime('%Y-%m-%d') if d.deadline else '',
+        '完成时间': d.completion_time.strftime('%Y-%m-%d') if d.completion_time else '',
+        '状态': d.status or '进行中'
+    } for d in details]
+
+    df = pd.DataFrame(data)
+    
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='项目计划详情')
+        worksheet = writer.sheets['项目计划详情']
+        worksheet.column_dimensions['A'].width = 30  # 主要内容
+        worksheet.column_dimensions['B'].width = 15  # 关键节点
+        worksheet.column_dimensions['C'].width = 15  # 责任部门
+        worksheet.column_dimensions['D'].width = 10  # 责任人
+        worksheet.column_dimensions['E'].width = 15  # 配合部门
+        worksheet.column_dimensions['F'].width = 15  # 配合人
+        worksheet.column_dimensions['G'].width = 10  # 责任领导
+        worksheet.column_dimensions['H'].width = 12  # 完成时限
+        worksheet.column_dimensions['I'].width = 12  # 完成时间
+        worksheet.column_dimensions['J'].width = 10  # 状态
+    
+    output.seek(0)
+    filename = f"project_plan_{plan_id}_details.xlsx"
+    
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        download_name=filename,
+        as_attachment=True
+    )
 
 @app.route('/complete_plan_detail/<int:detail_id>', methods=['POST'])
 def complete_plan_detail(detail_id):
