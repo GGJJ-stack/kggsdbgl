@@ -332,7 +332,25 @@ scheduler.add_job(check_overdue_projects, 'cron', hour=0)
 scheduler.add_job(transfer_weekly_reports, 'cron', day_of_week='sun', hour=12)
 scheduler.start()
 
-# -------------------- 路由 --------------------
+def check_permission(current_user, target_user):
+    """检查当前用户是否有权限修改目标用户的周报"""
+    return (
+        current_user.is_admin or
+        current_user.is_company_info or
+        (current_user.is_department_head and current_user.department == target_user.department) or
+        current_user.id == target_user.id
+    )
+
+def check_company_write_permission(user, department):
+    """检查公司周报的写入权限"""
+    return (
+        user.is_company_info or 
+        user.is_general_dept_head or 
+        (user.department == department and not CompanyWeeklyReport.query.filter_by(
+            department=department, archived=False, submitted=True
+        ).first())
+    )
+
 @app.route('/', methods=['GET', 'POST'])  
 def login():
     if request.method == 'POST':
@@ -2444,73 +2462,123 @@ def personal_weekly():
     if 'user' not in session:
         return redirect('/')
     
-    user = User.query.filter_by(username=session['user']).first()
+    # 获取当前用户信息
+    current_user = User.query.filter_by(username=session['user']).first()
+    if not current_user:
+        flash('用户信息异常，请重新登录', 'error')
+        return redirect('/logout')
+    
+    # 获取周报模板
     template = PersonalWeeklyTemplate.query.first()
     
+    # 构建用户列表（排除公司领导，按部门排序）
     users = User.query.filter_by(is_company_leader=False).order_by(
         User.department,
-        User.is_department_head.desc(),
+        User.is_department_head.desc(),  # 部门负责人排在前面
         User.username
     ).all()
     
+    # 获取当前未归档的周报
     current_reports = {r.user_id: r for r in PersonalWeeklyReport.query.filter_by(archived=False)}
     
     if request.method == 'POST':
-        if user.is_company_info or user.is_general_dept_head:
-            current_work = request.form.get('current_work', '')
-            next_plan = request.form.get('next_plan', '')
-            
-            if template is None:
-                template = PersonalWeeklyTemplate(
-                    current_work=current_work,
-                    next_plan=next_plan
-                )
-                db.session.add(template)
-            else:
-                template.current_work = current_work
-                template.next_plan = next_plan
-            db.session.commit()
-            flash('模板保存成功', 'success')
-        
-        for u in users:
-            if f'submit_{u.id}' in request.form:
-                report = current_reports.get(u.id)
+        try:
+            # 处理模板保存（仅限公司信息员和综合部负责人）
+            if current_user.is_company_info or current_user.is_general_dept_head:
+                new_template = request.form.get('template_current_work', '')
+                new_next_plan = request.form.get('template_next_plan', '')
                 
+                if template is None:
+                    template = PersonalWeeklyTemplate(
+                        current_work=new_template,
+                        next_plan=new_next_plan
+                    )
+                    db.session.add(template)
+                else:
+                    template.current_work = new_template
+                    template.next_plan = new_next_plan
+                db.session.commit()
+                flash('周报模板已更新', 'success')
+
+            # 处理个人周报提交
+            for user in users:
+                if f'submit_{user.id}' not in request.form:
+                    continue
+                
+                # 权限验证
+                if not check_permission(current_user, user):
+                    app.logger.warning(f"权限拒绝：用户 {current_user.username} 尝试修改 {user.username} 的周报")
+                    continue
+                
+                # 获取表单数据
+                current_work = request.form.get(f'current_work_{user.id}', '').strip()
+                next_plan = request.form.get(f'next_plan_{user.id}', '').strip()
+                
+                # 获取或创建周报记录
+                report = current_reports.get(user.id)
                 if not report:
                     report = PersonalWeeklyReport(
-                        user_id=u.id,
-                        current_work=request.form.get(f'current_work_{u.id}', ''),
-                        next_plan=request.form.get(f'next_plan_{u.id}', '')
+                        user_id=user.id,
+                        current_work=current_work,
+                        next_plan=next_plan
                     )
                     db.session.add(report)
                 else:
-
-                    if check_permission(user, u) or u.id == user.id:
-                        report.current_work = request.form.get(f'current_work_{u.id}', '')
-                        report.next_plan = request.form.get(f'next_plan_{u.id}', '')
-
-                if u.id == user.id and not report.submitted: 
+                    report.current_work = current_work
+                    report.next_plan = next_plan
+                
+                # 更新提交状态
+                if user.id == current_user.id:  # 本人提交
                     report.submitted = True
                     report.submit_time = datetime.utcnow()
-                elif (user.is_department_head or user.is_department_info) and user.department == u.department:
+                elif (current_user.is_department_head or current_user.is_department_info) \
+                    and current_user.department == user.department:  # 部门负责人/信息员提交
                     report.department_submitted = True
-                    report.submit_time = datetime.utcnow() 
+                    report.submit_time = datetime.utcnow()
                 
-                try:
-                    db.session.commit()
-                except Exception as e:
-                    db.session.rollback()
-                    flash(f'提交失败: {str(e)}', 'error')
+                db.session.commit()
+            
+            flash('周报提交成功', 'success')
+            return redirect(url_for('personal_weekly'))
         
-        return redirect(url_for('personal_weekly'))
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            app.logger.error(f"数据库错误：{str(e)}")
+            flash('提交失败：数据库错误', 'error')
+        except Exception as e:
+            app.logger.error(f"系统异常：{str(e)}")
+            flash('提交失败：系统异常', 'error')
     
-    show_archive_button = (user.is_company_info or user.is_general_dept_head)
-    return render_template('personal_weekly.html',
-                        users=users,
-                        current_reports=current_reports,
-                        template=template,
-                        user=user,
-                        show_archive_button=show_archive_button)
+    # 构建展示数据
+    show_archive_button = current_user.is_company_info or current_user.is_general_dept_head
+    
+    return render_template(
+        'personal_weekly.html',
+        users=users,
+        current_reports=current_reports,
+        template=template,
+        current_user=current_user,
+        show_archive_button=show_archive_button,
+        # 添加权限检查方法到模板上下文
+        check_permission=check_permission
+    )
+
+# 权限检查方法
+def check_permission(current_user, target_user):
+    """
+    验证当前用户是否有权限操作目标用户的周报
+    允许以下情况：
+    1. 当前用户是管理员
+    2. 当前用户是公司信息员
+    3. 当前用户是部门负责人且与目标用户同部门
+    4. 当前用户操作自己的周报
+    """
+    return (
+        current_user.is_admin or
+        current_user.is_company_info or
+        (current_user.is_department_head and current_user.department == target_user.department) or
+        current_user.id == target_user.id
+    )
 
 @app.route('/archive_weekly', methods=['POST'])
 def archive_weekly():
